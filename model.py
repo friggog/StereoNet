@@ -4,9 +4,10 @@ import torch.nn.functional as F
 from cost_volume import CostVolume
 import numpy as np
 
-class SteroNet(nn.Module):
+
+class StereoNet(nn.Module):
     def __init__(self):
-        super(SteroNet, self).__init__()
+        super(StereoNet, self).__init__()
         self.downsampling = nn.Sequential(
             nn.Conv2d(3, 32, 5, stride=2),
             nn.Conv2d(32, 32, 5, stride=2),
@@ -94,7 +95,10 @@ class SteroNet(nn.Module):
         disparity_low_l, disparity_low_r = self.forward_stage2(left_feature, right_feature)
         d_refined_l, d_refined_r = self.forward_stage3(disparity_low_l, disparity_low_r, left, right)
 
-        return d_refined_l, d_refined_r
+        d_final_l = nn.ReLU(disparity_low_r + d_refined_l)
+        d_final_r = nn.ReLU(disparity_low_r + d_refined_r)
+
+        return d_final_l, d_final_r
 
 
 class MetricBlock(nn.Module):
