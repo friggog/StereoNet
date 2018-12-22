@@ -2,7 +2,7 @@ import torch
 import numpy as np
 
 
-def CostVolume(input_feature, candidate_feature, position="left", k=4, batch_size=4, channel=32, D=192, H=375, W=1242):
+def CostVolume(input_feature, candidate_feature, position="left", method="subtract", k=4, batch_size=4, channel=32, D=192, H=375, W=1242):
     """
     Some parameters:
         position
@@ -18,7 +18,13 @@ def CostVolume(input_feature, candidate_feature, position="left", k=4, batch_siz
         leftMinusRightMove_List = []
         for disparity in range(D // 2**k):
             if disparity == 0:
-                leftMinusRightMove = origin - candidate
+                if method == "subtract":
+                    """ origin method"""
+                    leftMinusRightMove = origin - candidate
+                else:
+                    """ proposed concat mathod """
+                    leftMinusRightMove = torch.cat((origin, candidate), 1)
+                # print(leftMinusRightMove.shape)
                 leftMinusRightMove_List.append(leftMinusRightMove)
             else:
                 # zero_padding = np.zeros((batch_size, channel, disparity, H // 2**k))
@@ -32,7 +38,16 @@ def CostVolume(input_feature, candidate_feature, position="left", k=4, batch_siz
                 # print(origin.shape) # torch.Size([4, 32, 18, 72])
 
                 right_move = torch.cat((zero_padding, origin), 2)
-                leftMinusRightMove = right_move[:, :, :origin.shape[2], :] - candidate
+
+                if method == "subtract":
+                    """ origin method"""
+                    leftMinusRightMove = right_move[:, :, :origin.shape[2], :] - candidate
+                else:
+                    """ concat mathod """
+                    leftMinusRightMove = torch.cat((right_move[:, :, :origin.shape[2], :], candidate), 1)
+                # print(disparity)
+                # print(leftMinusRightMove.shape)
+                # print(len(leftMinusRightMove_List))
                 leftMinusRightMove_List.append(leftMinusRightMove)
         cost_volume = torch.stack(leftMinusRightMove_List, dim=1)
         return cost_volume

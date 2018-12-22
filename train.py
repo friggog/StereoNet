@@ -62,7 +62,12 @@ def main():
     test_loader = torch.utils.data.DataLoader(test_set, batch_size=batchSize, shuffle=False, num_workers=2,
                                               drop_last=True)
 
-    net = StereoNet(batchSize)
+    """ cost_volume_method 
+            -- subtract : the origin approach in the StereoNet paper
+            -- concat   : concatenateing the padding image and the other image
+    """
+    cost_volume_method = "subtract"
+    net = StereoNet(batchSize, cost_volume_method)
 
     if os.path.exists('./log/state.pkl'):
         checkpoint = torch.load('./log/state.pkl')
@@ -111,17 +116,27 @@ def main():
 
         pred_disp = output3.data.cpu()
 
-        # computing 3-px error#
-        true_disp = disp_true
-        index = np.argwhere(true_disp > 0)
-        disp_true[index[0][:], index[1][:], index[2][:]] = np.abs(
-            true_disp[index[0][:], index[1][:], index[2][:]] - pred_disp[index[0][:], index[1][:], index[2][:]])
-        correct = (disp_true[index[0][:], index[1][:], index[2][:]] < 3) | (
-                    disp_true[index[0][:], index[1][:], index[2][:]] < true_disp[
-                index[0][:], index[1][:], index[2][:]] * 0.05)
-        torch.cuda.empty_cache()
+        # # computing 3-px error#
+        # true_disp = disp_true
+        # index = np.argwhere(true_disp > 0)
+        # disp_true[index[0][:], index[1][:], index[2][:]] = np.abs(
+        #     true_disp[index[0][:], index[1][:], index[2][:]] - pred_disp[index[0][:], index[1][:], index[2][:]])
+        # correct = (disp_true[index[0][:], index[1][:], index[2][:]] < 3) | (
+        #             disp_true[index[0][:], index[1][:], index[2][:]] < true_disp[
+        #         index[0][:], index[1][:], index[2][:]] * 0.05)
+        # torch.cuda.empty_cache()
+        #
+        # return 1 - (float(torch.sum(correct)) / float(len(index[0])))
 
-        return 1 - (float(torch.sum(correct)) / float(len(index[0])))
+        diff = torch.abs(pred_disp-disp_true)
+        shape = imgL.shape
+        # print(shape)  # torch.Size([4, 3, 370, 1238])
+        acc = torch.sum(diff < 3)
+        acc = acc.item() / float(shape[2] * shape[3] * batchSize)
+
+        return acc
+
+
 
     loss_log = []
     max_acc = 0
@@ -144,6 +159,7 @@ def main():
         total_correct = 0
         time_before_load = time.perf_counter()
         acc_total = 0
+        EPE_total = 0
         for batch_idx, (left_img, right_img, left_gt) in enumerate(train_loader):
 
             time_after_load = time.perf_counter()
@@ -168,11 +184,13 @@ def main():
             # print(diff)
             shape = left_img.shape
             # print(shape)  # torch.Size([4, 3, 370, 1238])
-            acc = torch.sum(diff < 1)
+            acc = torch.sum(diff < 3)
             acc = acc.item() / float(shape[2]*shape[3]*batchSize)
             acc_total += acc
 
-
+            diff = np.asarray(diff)
+            EPE = np.mean(diff)
+            EPE_total += EPE
 
             optimizer.zero_grad()
             loss.backward()
@@ -185,6 +203,8 @@ def main():
             if batch_idx == 19:
                 # print("Acc = %f  <ACC> = %f" % (acc, acc_total / (batch_idx + 1)))
                 logger.info("Average ACC = %f" % (acc_total / (batch_idx + 1)))
+                # logger.info("Average EPE = %f" % (EPE_total / (batch_idx + 1)))
+
 
                 logger.info("[{}:{}/{}] LOSS={:.2} <LOSS>={:.2} time={:.2}+{:.2}".format(
                     epoch, batch_idx+1, len(train_loader),
@@ -199,15 +219,18 @@ def main():
         if epoch > 8 and epoch % 10 == 0:
             """ TEST at epoch end"""
             for batch_idx, (imgL, imgR, disp_L) in enumerate(test_loader):
+                # test_loss = test(imgL, imgR, disp_L)
+                # print('Iter %d 3-px error in val = %.3f' % (batch_idx, test_loss * 100))
+                # total_test_loss += test_loss
                 test_loss = test(imgL, imgR, disp_L)
-                print('Iter %d 3-px error in val = %.3f' % (batch_idx, test_loss * 100))
+                print('Iter %d 3-px ACC in val = %.3f' % (batch_idx, test_loss * 100))
                 total_test_loss += test_loss
 
-            print('epoch %d total 3-px error in val = %.3f' % (epoch, total_test_loss / len(test_loader) * 100))
+            print('epoch %d total 3-px ACC in val = %.3f' % (epoch, total_test_loss / len(test_loader) * 100))
             if total_test_loss / len(test_loader) * 100 > max_acc:
                 max_acc = total_test_loss / len(test_loader) * 100
                 max_epo = epoch
-            print('MAX epoch %d total test error = %.3f' % (max_epo, max_acc))
+            print('MAX epoch %d total ACC error = %.3f' % (max_epo, max_acc))
 
         # loss_log.append(total_loss)
 

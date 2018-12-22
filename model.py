@@ -8,10 +8,11 @@ from torchvision import datasets, transforms
 
 
 class StereoNet(nn.Module):
-    def __init__(self, batch_size):
+    def __init__(self, batch_size, cost_volume_method):
         super(StereoNet, self).__init__()
 
         self.batch_size = batch_size
+        self.cost_volume_method = cost_volume_method
 
         self.downsampling = nn.Sequential(
             nn.Conv2d(3, 32, 5, stride=2),
@@ -32,7 +33,7 @@ class StereoNet(nn.Module):
 
         """ using 3d conv to instead the Euclidean distance"""
         self.cost_volume_filter = nn.Sequential(
-            MetricBlock(32, 32),
+            MetricBlock(64, 32),
             MetricBlock(32, 32),
             MetricBlock(32, 32),
             MetricBlock(32, 32),
@@ -77,7 +78,7 @@ class StereoNet(nn.Module):
         return disparity_low  # low resolution disparity map
 
     def forward_stage2(self, feature_l, feature_r):
-        cost_v_l = CostVolume(feature_l, feature_r, "left", k=4, batch_size=self.batch_size)
+        cost_v_l = CostVolume(feature_l, feature_r, "left", method=self.cost_volume_method, k=4, batch_size=self.batch_size)
         # cost_v_r = CostVolume(feature_r, feature_l, "right", k=4, batch_size=self.batch_size)
         disparity_low = self.forward_once_2(cost_v_l)
         # disparity_low_r = self.forward_once_2(cost_v_r)
@@ -123,8 +124,6 @@ class StereoNet(nn.Module):
         # image = image.squeeze(1)
         # image = unloader(image)
         # image.show()
-
-
 
         # TODO : the paper says here should add them up, but I don't agree with that
         # d_final_l = nn.ReLU(disparity_low_r + d_refined_l)

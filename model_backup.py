@@ -78,42 +78,42 @@ class StereoNet(nn.Module):
 
     def forward_stage2(self, feature_l, feature_r):
         cost_v_l = CostVolume(feature_l, feature_r, "left", k=4, batch_size=self.batch_size)
-        cost_v_r = CostVolume(feature_r, feature_l, "right", k=4, batch_size=self.batch_size)
-        disparity_low_l = self.forward_once_2(cost_v_l)
-        disparity_low_r = self.forward_once_2(cost_v_r)
+        # cost_v_r = CostVolume(feature_r, feature_l, "right", k=4, batch_size=self.batch_size)
+        disparity_low = self.forward_once_2(cost_v_l)
+        # disparity_low_r = self.forward_once_2(cost_v_r)
 
-        return disparity_low_l, disparity_low_r
+        return disparity_low
 
     def forward_once3(self, concatenation):
         refined_d = self.refine(concatenation)
 
         return refined_d
 
-    def forward_stage3(self, disparity_low_l, disparity_low_r, left, right):
+    def forward_stage3(self, disparity_low, left):
         """upsample and concatenate"""
         # print(left.shape)
 
         # d_high_l = nn.functional.upsample_bilinear(disparity_low_l, [left.shape[2], left.shape[3]])
-        d_high_l = nn.functional.interpolate(disparity_low_l, [left.shape[2], left.shape[3]])
+        d_high = nn.functional.interpolate(disparity_low, [left.shape[2], left.shape[3]])
         # d_high_r = nn.functional.upsample_bilinear(disparity_low_r, [right.shape[2], right.shape[3]])
-        d_high_r = nn.functional.interpolate(disparity_low_r, [right.shape[2], right.shape[3]])
+        # d_high_r = nn.functional.interpolate(disparity_low_r, [right.shape[2], right.shape[3]])
 
         # print(disparity_low_l.shape) # torch.Size([4, 1, 16, 70])
         # print(d_high_l.shape) # torch.Size([4, 1, 375, 1242])
         # print(left.shape)
 
-        d_concat_l = torch.cat([d_high_l, left], dim=1)
-        d_concat_r = torch.cat([d_high_r, right], dim=1)
+        d_concat = torch.cat([d_high, left], dim=1)
+        # d_concat_r = torch.cat([d_high_r, right], dim=1)
 
-        d_refined_l = self.forward_once3(d_concat_l)
-        d_refined_r = self.forward_once3(d_concat_r)
+        d_refined = self.forward_once3(d_concat)
+        # d_refined_r = self.forward_once3(d_concat_r)
 
-        return d_refined_l, d_refined_r
+        return d_refined
 
     def forward(self, left, right):
         left_feature, right_feature = self.forward_stage1(left, right)
-        disparity_low_l, disparity_low_r = self.forward_stage2(left_feature, right_feature)
-        d_refined_l, d_refined_r = self.forward_stage3(disparity_low_l, disparity_low_r, left, right)
+        disparity_low = self.forward_stage2(left_feature, right_feature)
+        d_refined = self.forward_stage3(disparity_low, left)
 
         # print(d_refined_l.shape)
 
@@ -131,7 +131,7 @@ class StereoNet(nn.Module):
         # d_final_r = nn.ReLU(disparity_low_r + d_refined_r)
 
         # return d_final_l, d_final_r
-        return d_refined_l, d_refined_r
+        return d_refined
 
 class MetricBlock(nn.Module):
     def __init__(self, in_channel, out_channel, stride = 1):
