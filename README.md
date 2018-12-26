@@ -1,6 +1,8 @@
 # Pytorch StereoNet
 Customized implementation of the [Stereonet guided hierarchical refinement for real-time edge-aware depth prediction](http://openaccess.thecvf.com/content_ECCV_2018/papers/Sameh_Khamis_StereoNet_Guided_Hierarchical_ECCV_2018_paper.pdf)
 
+![The network archtecture of StereoNet](https://github.com/zhixuanli/StereoNet/blob/master/stereo-net-structure.png)
+
 ## Attention: Not accomplished yet
 1. Till 2018-12-22, the [https://github.com/meteorshowers/StereoNet](https://github.com/meteorshowers/StereoNet) still not released the code.
 And that's the only version of the StereoNet now.
