@@ -2,7 +2,7 @@ import torch
 import numpy as np
 
 
-def CostVolume(input_feature, candidate_feature, position="left", method="subtract", k=4, batch_size=4, channel=32, D=192, H=375, W=1242):
+def CostVolume(input_feature, candidate_feature, position="left", method="subtract", k=4, batch_size=4, channel=32, D=192, H=256, W=512):
     """
     Some parameters:
         position
@@ -11,6 +11,8 @@ def CostVolume(input_feature, candidate_feature, position="left", method="subtra
             the conv counts of the first stage, the feature extraction stage
     """
     origin = input_feature  # img shape : [batch_size, H // 2**k, W // 2**k, channel]
+    print("origin.shape")
+    print(origin.shape)
     candidate = candidate_feature
     """ if the input image is the left image, and needs to compare with the right candidate.
         Then it should move to right and pad in left"""

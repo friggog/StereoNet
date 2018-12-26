@@ -70,7 +70,8 @@ class StereoNet(nn.Module):
     def forward_once_2(self, cost_volume):
         """the index cost volume's dimension is not right for conv3d here, so we change it"""
         cost_volume = cost_volume.permute([0, 2, 1, 3, 4])
-        # print(cost_volume.shape)
+        print("cost_volume.shape")
+        print(cost_volume.shape)
         output = self.cost_volume_filter(cost_volume)
         # print(output.shape)
         disparity_low = soft_argmin(output, self.batch_size)
