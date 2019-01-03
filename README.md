@@ -8,6 +8,7 @@ Customized implementation of the [Stereonet guided hierarchical refinement for r
 And that's the only version of the StereoNet now.
 Hope the coder can release the code as soon as possible so I can rectify the codes in my repository. 
 2. The approach of computing the cost volume in the StereoNet paper is subtracting the padding image and the other image. Here I changed it to concatenate the two images. If you want to change it to the paper's way, just set it in the train.py when you initialize the net.
+3. Only traning and testing on the KITTI 2015 train dataset is not enough, the best performance has achieved 74.5% (pixels with error smaller than 1). **Pretraining on the SceneFlow dataset is necessary**.
 
 ## Pre-requirement
 + Pytorch 1.0.0
@@ -22,7 +23,7 @@ Hope the coder can release the code as soon as possible so I can rectify the cod
 2. bash Anaconda3-5.3.1-Linux-x86_64.sh
 ```
 
-Please reference to [Ubuntu系统下Anaconda使用方法总结](http://zhixuanli.cn/?p=468) for more information about install conda.
+Please reference to [Ubuntu系统下Anaconda使用方法总结](https://www.cnblogs.com/QingHuan/p/9987069.html) for more information about install conda.
 
 #### Create Virtual Environment according to my environment index 
 ```conda env create -n your_env_name -f environment.yaml```

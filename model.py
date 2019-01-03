@@ -13,6 +13,13 @@ class StereoNet(nn.Module):
 
         self.batch_size = batch_size
         self.cost_volume_method = cost_volume_method
+        cost_volume_channel = 32
+        if cost_volume_method == "subtract":
+            cost_volume_channel = 32
+        elif cost_volume_method == "concat":
+            cost_volume_channel = 64
+        else:
+            print("cost_volume_method is not right")
 
         self.downsampling = nn.Sequential(
             nn.Conv2d(3, 32, 5, stride=2),
@@ -33,7 +40,7 @@ class StereoNet(nn.Module):
 
         """ using 3d conv to instead the Euclidean distance"""
         self.cost_volume_filter = nn.Sequential(
-            MetricBlock(64, 32),
+            MetricBlock(cost_volume_channel, 32),
             MetricBlock(32, 32),
             MetricBlock(32, 32),
             MetricBlock(32, 32),
@@ -70,8 +77,8 @@ class StereoNet(nn.Module):
     def forward_once_2(self, cost_volume):
         """the index cost volume's dimension is not right for conv3d here, so we change it"""
         cost_volume = cost_volume.permute([0, 2, 1, 3, 4])
-        print("cost_volume.shape")
-        print(cost_volume.shape)
+        # print("cost_volume.shape")
+        # print(cost_volume.shape)
         output = self.cost_volume_filter(cost_volume)
         # print(output.shape)
         disparity_low = soft_argmin(output, self.batch_size)

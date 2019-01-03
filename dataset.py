@@ -62,6 +62,7 @@ class kitti15(torch.utils.data.Dataset):
         left_gt = left_gt.unsqueeze(1)
         # print(left_gt.shape)
         left_gt = left_gt.permute(1, 0, 2).float()
+        # print("left_gt.shape")
         # print(left_gt.shape)
 
         # right_gt = self.transform(self.right_img_files[index])

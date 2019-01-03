@@ -69,11 +69,6 @@ def main():
     cost_volume_method = "subtract"
     net = StereoNet(batchSize, cost_volume_method)
 
-    if os.path.exists('./log/state.pkl'):
-        checkpoint = torch.load('./log/state.pkl')
-        # print(checkpoint)
-        net.load_state_dict(checkpoint)
-        print("checkpoint loaded")
     # print(net)
     net = net.to('cuda')
 
@@ -81,6 +76,17 @@ def main():
     # logger.info("{} paramerters in the last layer".format(sum(x.numel() for x in net.out_layer.parameters())))
 
     optimizer = optim.RMSprop(net.parameters(), lr=learning_rate, alpha=0.9)
+    epoch = 0
+
+    if os.path.exists('./log/state.pkl'):
+        checkpoint = torch.load('./log/state.pkl')
+        # print(checkpoint)
+        net.load_state_dict(checkpoint['model_state_dict'])
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        epoch = checkpoint['epoch']
+        loss = checkpoint['loss']
+        print("checkpoint loaded")
+
 
 
 
@@ -131,10 +137,11 @@ def main():
         diff = torch.abs(pred_disp-disp_true)
         shape = imgL.shape
         # print(shape)  # torch.Size([4, 3, 370, 1238])
-        acc = torch.sum(diff < 3)
+        acc = torch.sum(diff < 1)
         acc = acc.item() / float(shape[2] * shape[3] * batchSize)
+        EPE = np.mean(diff)
 
-        return acc
+        return acc, EPE
 
 
 
@@ -147,7 +154,7 @@ def main():
     # y = torch.sin(x)
     # vis.line(X=x, Y=y, win='sinx', opts={'title': 'y=sin(x)'})
 
-    for epoch in range(15000):
+    for epoch in range(epoch, 15000):
         lr = get_learning_rate(epoch)
         for param_group in optimizer.param_groups:
             param_group['lr'] = lr
@@ -155,11 +162,12 @@ def main():
         net.train()
 
         total_loss = 0
-        total_test_loss = 0
+        total_test_acc = 0
         total_correct = 0
         time_before_load = time.perf_counter()
         acc_total = 0
         EPE_total = 0
+        loss = 0
         for batch_idx, (left_img, right_img, left_gt) in enumerate(train_loader):
 
             time_after_load = time.perf_counter()
@@ -184,7 +192,7 @@ def main():
             # print(diff)
             shape = left_img.shape
             # print(shape)  # torch.Size([4, 3, 370, 1238])
-            acc = torch.sum(diff < 3)
+            acc = torch.sum(diff < 1)
             acc = acc.item() / float(shape[2]*shape[3]*batchSize)
             acc_total += acc
 
@@ -203,8 +211,7 @@ def main():
             if batch_idx == 19:
                 # print("Acc = %f  <ACC> = %f" % (acc, acc_total / (batch_idx + 1)))
                 logger.info("Average ACC = %f" % (acc_total / (batch_idx + 1)))
-                # logger.info("Average EPE = %f" % (EPE_total / (batch_idx + 1)))
-
+                logger.info("Average EPE = %f" % (EPE_total / (batch_idx + 1)))
 
                 logger.info("[{}:{}/{}] LOSS={:.2} <LOSS>={:.2} time={:.2}+{:.2}".format(
                     epoch, batch_idx+1, len(train_loader),
@@ -218,17 +225,20 @@ def main():
 
         if epoch > 8 and epoch % 10 == 0:
             """ TEST at epoch end"""
+            total_acc = 0
+            total_EPE = 0
             for batch_idx, (imgL, imgR, disp_L) in enumerate(test_loader):
                 # test_loss = test(imgL, imgR, disp_L)
                 # print('Iter %d 3-px error in val = %.3f' % (batch_idx, test_loss * 100))
                 # total_test_loss += test_loss
-                test_loss = test(imgL, imgR, disp_L)
-                print('Iter %d 3-px ACC in val = %.3f' % (batch_idx, test_loss * 100))
-                total_test_loss += test_loss
+                test_acc, test_EPE = test(imgL, imgR, disp_L)
+                print('Iter %d 1-px ACC in val = %.3f, EPE in val = %f' % (batch_idx, test_acc * 100, test_EPE))
+                total_acc += test_acc
+                total_EPE += test_EPE
 
-            print('epoch %d total 3-px ACC in val = %.3f' % (epoch, total_test_loss / len(test_loader) * 100))
-            if total_test_loss / len(test_loader) * 100 > max_acc:
-                max_acc = total_test_loss / len(test_loader) * 100
+            print('epoch %d total 1-px ACC in val = %.3f' % (epoch, total_test_acc / len(test_loader) * 100))
+            if total_test_acc / len(test_loader) * 100 > max_acc:
+                max_acc = total_test_acc / len(test_loader) * 100
                 max_epo = epoch
             print('MAX epoch %d total ACC error = %.3f' % (max_epo, max_acc))
 
@@ -239,7 +249,15 @@ def main():
             output = "epoch = %d LOSS = %f\n" % (epoch, total_loss)
             f.writelines(output)
 
-        torch.save(net.state_dict(), os.path.join(log_dir, "state.pkl"))
+        """ SAVING & LOADING A GENERAL CHECKPOINT FOR INFERENCE AND/OR RESUMING TRAINING
+            https://pytorch.org/tutorials/beginner/saving_loading_models.html#saving-loading-a-general-checkpoint-for-inference-and-or-resuming-training
+        """
+        torch.save({
+            'epoch': epoch+1,
+            'model_state_dict': net.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'loss': loss
+        }, os.path.join(log_dir, "state.pkl"))
 
 
 if __name__=='__main__':
