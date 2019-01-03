@@ -26,6 +26,11 @@ h=256
 w=512
 maxdisp=192
 
+# 禁止打印数组时使用省略号代替
+np.set_printoptions(threshold=np.inf)
+# 输出到log文件中
+log = open("log/output.txt", "w")
+
 
 def main():
     arguments = copy.deepcopy(locals())
@@ -87,9 +92,6 @@ def main():
         loss = checkpoint['loss']
         print("checkpoint loaded")
 
-
-
-
     """ An exponentially-decaying learning rate:
     https://towardsdatascience.com/learning-rate-schedules-and-adaptive-learning-rate-methods-for-deep-learning-2c8f433990d1"""
     def get_learning_rate(epoch):
@@ -119,30 +121,27 @@ def main():
         with torch.no_grad():
             output3 = net(imgL, imgR)
             # show_tensor_img(output3)
+        print("output3.shape")
+        print(output3.shape)
 
         pred_disp = output3.data.cpu()
 
-        # # computing 3-px error#
-        # true_disp = disp_true
-        # index = np.argwhere(true_disp > 0)
-        # disp_true[index[0][:], index[1][:], index[2][:]] = np.abs(
-        #     true_disp[index[0][:], index[1][:], index[2][:]] - pred_disp[index[0][:], index[1][:], index[2][:]])
-        # correct = (disp_true[index[0][:], index[1][:], index[2][:]] < 3) | (
-        #             disp_true[index[0][:], index[1][:], index[2][:]] < true_disp[
-        #         index[0][:], index[1][:], index[2][:]] * 0.05)
-        # torch.cuda.empty_cache()
-        #
-        # return 1 - (float(torch.sum(correct)) / float(len(index[0])))
+
+
+
 
         diff = torch.abs(pred_disp-disp_true)
+
         shape = imgL.shape
         # print(shape)  # torch.Size([4, 3, 370, 1238])
         acc = torch.sum(diff < 1)
         acc = acc.item() / float(shape[2] * shape[3] * batchSize)
+        # print(type(diff))
+        # print("type(diff)")
+        diff = np.asarray(diff)
         EPE = np.mean(diff)
 
         return acc, EPE
-
 
 
     loss_log = []
@@ -173,30 +172,47 @@ def main():
             time_after_load = time.perf_counter()
             time_before_step = time.perf_counter()
 
+            # if batch_idx == 0:
+            #     print(left_gt, file=log)
+            #     # accc = np.squeeze(left_gt)
+            #     accc = np.sum(left_gt > 10)
+            #     print("accc")
+            #     print(accc)
+
+
+
             left_img, right_img, left_gt = left_img.to('cuda'), right_img.to('cuda'), left_gt.to('cuda')
             l_prediction = net(left_img, right_img)
-            # print(l_prediction.shape)
-            # print(left_gt.shape)
-            # print(left_gt)
-            # loss = loss_fn(l_prediction, left_gt) + loss_fn(r_prediction, left_gt)
 
             loss = nn.functional.smooth_l1_loss(l_prediction, left_gt)
 
-            # show_tensor_img(l_prediction)
-            # show_tensor_img(left_gt)
-
-            # if batch_idx == 1:
-            #     return
-
             diff = torch.abs(l_prediction.data.cpu() - left_gt.data.cpu())
-            # print(diff)
+            pred_disp_np = np.asarray(l_prediction.data.cpu())
+            disp_true_np = np.asarray(left_gt.data.cpu())
+
+            # if batch_idx == 0:
+
+                # print(pred_disp_np, file=log)
+                # print(pred_disp_np)
+                # print(pred_disp_np.shape)
+                # acc1 = np.sum(pred_disp_np > 100)
+
+                # print(disp_true_np)
+
+                # acc2 = np.sum(disp_true_np > 100)
+                # print(acc1)
+                # print(acc2)
+                #
+                # print("Out done!!!!!!!!")
+
             shape = left_img.shape
-            # print(shape)  # torch.Size([4, 3, 370, 1238])
+
             acc = torch.sum(diff < 1)
             acc = acc.item() / float(shape[2]*shape[3]*batchSize)
             acc_total += acc
 
             diff = np.asarray(diff)
+
             EPE = np.mean(diff)
             EPE_total += EPE
 
@@ -213,7 +229,7 @@ def main():
                 logger.info("Average ACC = %f" % (acc_total / (batch_idx + 1)))
                 logger.info("Average EPE = %f" % (EPE_total / (batch_idx + 1)))
 
-                logger.info("[{}:{}/{}] LOSS={:.2} <LOSS>={:.2} time={:.2}+{:.2}".format(
+                logger.info("[{}:{}/{}] LOSS={:.3} <LOSS>={:.3} time={:.2}+{:.2}".format(
                     epoch, batch_idx+1, len(train_loader),
                     loss, total_loss / (batch_idx + 1),
                     # correct / len(data), total_correct / len(data) / (batch_idx + 1),
@@ -237,7 +253,7 @@ def main():
                 total_EPE += test_EPE
 
             print('epoch %d total 1-px ACC in val = %.3f' % (epoch, total_test_acc / len(test_loader) * 100))
-            if total_test_acc / len(test_loader) * 100 > max_acc:
+            if total_acc / len(test_loader) * 100 > max_acc:
                 max_acc = total_test_acc / len(test_loader) * 100
                 max_epo = epoch
             print('MAX epoch %d total ACC error = %.3f' % (max_epo, max_acc))

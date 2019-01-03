@@ -51,6 +51,7 @@ class kitti15(torch.utils.data.Dataset):
         # left_img = left_img.crop((0, 0, 370, 1238))
         # right_img = right_img.crop((0, 0, 370, 1238))
         left_gt = left_gt.crop((0, 0, 1234, 366))
+        left_gt = np.ascontiguousarray(left_gt, dtype=np.float32) / 256
         # left_gt.show()
 
         right_img = self.transform(np.asarray(right_img))

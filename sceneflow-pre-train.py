@@ -16,8 +16,7 @@ from torch.utils.data import Dataset, DataLoader
 from dataset import kitti15
 import visdom
 from dataloader import listflowfile as lt
-from dataloader import SecenFlowLoader as DA
-
+from dataloader import SceneFlowLoader as DA
 
 # number of samples in each iteration
 batchSize = 8
@@ -62,6 +61,7 @@ def main():
     #                                           drop_last=True)
 
     data_path = "/datasets/sceneflow"
+    # scene flow images shape : 960x540
 
     all_left_img, all_right_img, all_left_disp, test_left_img, test_right_img, test_left_disp = lt.dataloader(
         data_path)
@@ -215,7 +215,7 @@ def main():
             if batch_idx == 19:
                 # print("Acc = %f  <ACC> = %f" % (acc, acc_total / (batch_idx + 1)))
                 logger.info("Average ACC = %f" % (acc_total / (batch_idx + 1)))
-                # logger.info("Average EPE = %f" % (EPE_total / (batch_idx + 1)))
+                logger.info("Average EPE = %f" % (EPE_total / (batch_idx + 1)))
 
 
                 logger.info("[{}:{}/{}] LOSS={:.2} <LOSS>={:.2} time={:.2}+{:.2}".format(
