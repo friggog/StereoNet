@@ -52,6 +52,8 @@ def CostVolume(input_feature, candidate_feature, position="left", method="subtra
                 # print(len(leftMinusRightMove_List))
                 leftMinusRightMove_List.append(leftMinusRightMove)
         cost_volume = torch.stack(leftMinusRightMove_List, dim=1)
+        # print("cost_volume.shape")
+        # print(cost_volume.shape)  # torch.Size([8, 12, 32, 11, 27])
         return cost_volume
 
     elif position == "right":

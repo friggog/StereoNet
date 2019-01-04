@@ -51,8 +51,8 @@ def main():
 
     transform = transforms.Compose([
         # transforms.RandomSizedCrop((388, 1240)),
-        transforms.ToPILImage(),
-        transforms.CenterCrop((370, 1238)),
+        # transforms.ToPILImage(),
+        # transforms.CenterCrop((370, 1238)),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         # transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))
@@ -95,14 +95,18 @@ def main():
     """ An exponentially-decaying learning rate:
     https://towardsdatascience.com/learning-rate-schedules-and-adaptive-learning-rate-methods-for-deep-learning-2c8f433990d1"""
     def get_learning_rate(epoch):
-        initial_lr = 1e-3
+        initial_lr = 1e-4
         k = 0.01
-        lr = initial_lr * pow(np.e, -k*epoch)
+        # lr = initial_lr * pow(np.e, -k*epoch)
+        if epoch < 500:
+            lr = 1e-6
+        else:
+            lr = 1e-7
         return lr
 
     """ show batch tensor img """
     def show_tensor_img(tensor_img):
-        print(tensor_img.shape)  # torch.Size([4, 1, 366, 1234])
+        # print(tensor_img.shape)  # torch.Size([4, 1, 366, 1234])
         tensor_img = tensor_img[0]
         # print(tensor_img.shape)  # torch.Size([1, 366, 1234])
 
@@ -121,14 +125,10 @@ def main():
         with torch.no_grad():
             output3 = net(imgL, imgR)
             # show_tensor_img(output3)
-        print("output3.shape")
-        print(output3.shape)
+        # print("output3.shape")
+        # print(output3.shape)
 
         pred_disp = output3.data.cpu()
-
-
-
-
 
         diff = torch.abs(pred_disp-disp_true)
 
@@ -143,15 +143,10 @@ def main():
 
         return acc, EPE
 
-
+    """ Training """
     loss_log = []
     max_acc = 0
     max_epo = 0
-    # x = torch.arange(15000)
-    # vis = visdom.Visdom(env=u'stereonet', use_incoming_socket=False)
-    # x = torch.arange(1, 30, 0.01)
-    # y = torch.sin(x)
-    # vis.line(X=x, Y=y, win='sinx', opts={'title': 'y=sin(x)'})
 
     for epoch in range(epoch, 15000):
         lr = get_learning_rate(epoch)
@@ -172,17 +167,14 @@ def main():
             time_after_load = time.perf_counter()
             time_before_step = time.perf_counter()
 
-            # if batch_idx == 0:
-            #     print(left_gt, file=log)
-            #     # accc = np.squeeze(left_gt)
-            #     accc = np.sum(left_gt > 10)
-            #     print("accc")
-            #     print(accc)
-
-
-
             left_img, right_img, left_gt = left_img.to('cuda'), right_img.to('cuda'), left_gt.to('cuda')
             l_prediction = net(left_img, right_img)
+
+            # print(left_img.shape)
+            # print(right_img.shape)
+
+            # print("l_prediction.shape")
+            # print(l_prediction.shape)  # torch.Size([8, 1, 366, 1234])
 
             loss = nn.functional.smooth_l1_loss(l_prediction, left_gt)
 
@@ -239,8 +231,9 @@ def main():
 
             avg_loss = total_loss / (batch_idx + 1)
 
+        """
         if epoch > 8 and epoch % 10 == 0:
-            """ TEST at epoch end"""
+            
             total_acc = 0
             total_EPE = 0
             for batch_idx, (imgL, imgR, disp_L) in enumerate(test_loader):
@@ -257,7 +250,7 @@ def main():
                 max_acc = total_test_acc / len(test_loader) * 100
                 max_epo = epoch
             print('MAX epoch %d total ACC error = %.3f' % (max_epo, max_acc))
-
+        """
         # loss_log.append(total_loss)
 
         # vis.line(X=epoch, Y=loss_log[epoch], win='StereoNet_Loss', update='append' if epoch > 0 else None)

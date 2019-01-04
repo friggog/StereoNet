@@ -49,14 +49,15 @@ class StereoNet(nn.Module):
 
         # TODO what is the input channel size
         self.refine = nn.Sequential(
-            nn.Conv2d(4, 32, 3),
-            ResBlock(32, 32, padding=1, dilation=1),
-            ResBlock(32, 32, padding=2, dilation=2),
-            ResBlock(32, 32, padding=4, dilation=4),
-            ResBlock(32, 32, padding=8, dilation=8),
-            ResBlock(32, 32, padding=1, dilation=1),
-            ResBlock(32, 32, padding=1, dilation=1),
-            nn.Conv2d(32, 1, 3),
+            nn.Conv2d(4, 32, 3, padding=1),
+            ResBlock(32, 32, dilation=1),
+            ResBlock(32, 32, dilation=2),
+            ResBlock(32, 32, dilation=4),
+            ResBlock(32, 32, dilation=8),
+            ResBlock(32, 32, dilation=1),
+            ResBlock(32, 32, dilation=1),
+            nn.Conv2d(32, 1, 3, padding=1),
+            nn.ReLU(),
         )
 
     def forward_once_1(self, x):
@@ -77,26 +78,24 @@ class StereoNet(nn.Module):
     def forward_once_2(self, cost_volume):
         """the index cost volume's dimension is not right for conv3d here, so we change it"""
         cost_volume = cost_volume.permute([0, 2, 1, 3, 4])
-        # print("cost_volume.shape")
-        # print(cost_volume.shape)
-        output = self.cost_volume_filter(cost_volume)
-        # print(output.shape)
+        # print("forward_once_2 cost_volume.shape")
+        # print(cost_volume.shape)  # torch.Size([8, 32, 12, 11, 27])
+        output = self.cost_volume_filter(cost_volume)  # [batch_size, channel, disparity, h, w]
+        # print("output.shape")
+        # print(output.shape)  # torch.Size([8, 1, 10, 9, 25])
         disparity_low = soft_argmin(output, self.batch_size)
 
         return disparity_low  # low resolution disparity map
 
     def forward_stage2(self, feature_l, feature_r):
         cost_v_l = CostVolume(feature_l, feature_r, "left", method=self.cost_volume_method, k=4, batch_size=self.batch_size)
+        # print("cost_v_l.shape")
+        # print(cost_v_l.shape)  # torch.Size([8, 12, 32, 11, 27])
         # cost_v_r = CostVolume(feature_r, feature_l, "right", k=4, batch_size=self.batch_size)
         disparity_low = self.forward_once_2(cost_v_l)
         # disparity_low_r = self.forward_once_2(cost_v_r)
 
         return disparity_low
-
-    def forward_once3(self, concatenation):
-        refined_d = self.refine(concatenation)
-
-        return refined_d
 
     def forward_stage3(self, disparity_low, left):
         """upsample and concatenate"""
@@ -108,23 +107,33 @@ class StereoNet(nn.Module):
         # d_high_r = nn.functional.interpolate(disparity_low_r, [right.shape[2], right.shape[3]])
 
         # print(disparity_low_l.shape) # torch.Size([4, 1, 16, 70])
-        # print(d_high_l.shape) # torch.Size([4, 1, 375, 1242])
+        # print("d_high.shape")  # torch.Size([4, 1, 375, 1242])
+        # print(d_high.shape)  # torch.Size([4, 1, 375, 1242])
         # print(left.shape)
 
         d_concat = torch.cat([d_high, left], dim=1)
         # d_concat_r = torch.cat([d_high_r, right], dim=1)
 
-        d_refined = self.forward_once3(d_concat)
+        # print("d_concat.shape")
+        # print(d_concat.shape)  # torch.Size([8, 4, 256, 512])
+
+        d_refined = self.refine(d_concat)
         # d_refined_r = self.forward_once3(d_concat_r)
+
+        # print("d_refined")
+        # print(d_refined.shape)
 
         return d_refined
 
     def forward(self, left, right):
         left_feature, right_feature = self.forward_stage1(left, right)
         disparity_low = self.forward_stage2(left_feature, right_feature)
+        # print("left.shape")
+        # print(left.shape)  # torch.Size([8, 3, 256, 512])
         d_refined = self.forward_stage3(disparity_low, left)
 
-        # print(d_refined_l.shape)
+        # print("d_refined.shape")
+        # print(d_refined.shape)  # torch.Size([8, 1, 256, 512])
 
         # tensor = d_refined_l
         # unloader = transforms.ToPILImage()
@@ -155,29 +164,52 @@ class MetricBlock(nn.Module):
 
 
 class ResBlock(nn.Module):
-    def __init__(self, in_channel, out_channel, padding=1, dilation=1, stride=1, downsample=None):
+    def __init__(self, in_channel, out_channel, dilation=1, stride=1, downsample=None):
         super(ResBlock, self).__init__()
+
+        # To keep the shape of input and output same when dilation conv, we should compute the padding:
+        # Reference:
+        #   https://discuss.pytorch.org/t/how-to-keep-the-shape-of-input-and-output-same-when-dilation-conv/14338
+        # padding = [(o-1)*s+k+(k-1)*(d-1)-i]/2, here the i is input size, and o is output size.
+        # set o = i, then padding = [i*(s-1)+k+(k-1)*(d-1)]/2 = [k+(k-1)*(d-1)]/2      , stride always equals 1
+        # if dilation != 1:
+        #     padding = (3+(3-1)*(dilation-1))/2
+        padding = dilation
+
         self.conv1 = nn.Conv2d(in_channel, out_channel, kernel_size=3, stride=stride,
                      padding=padding, dilation=dilation, bias=False)
         self.bn1 = nn.BatchNorm2d(out_channel)
-        self.relu = nn.LeakyReLU(negative_slope=0.2, inplace=True)
+        self.relu1 = nn.LeakyReLU(negative_slope=0.2, inplace=True)
+
+        self.conv2 = nn.Conv2d(out_channel, out_channel, kernel_size=3, stride=stride,
+                               padding=padding, dilation=dilation, bias=False)
+        self.bn2 = nn.BatchNorm2d(out_channel)
+        self.relu2 = nn.LeakyReLU(negative_slope=0.2, inplace=True)
 
         self.downsample = downsample
         self.stride = stride
+        self.in_ch = in_channel
+        self.out_ch = out_channel
+        self.p = padding
+        self.d = dilation
 
     def forward(self, x):
+        # print("in_ch = %d, out_ch = %d, p = %d, d = %d, s = %s" % (self.in_ch, self.out_ch, self.p, self.d, self.stride))
         residual = x
+        # print("residual.shape")
+        # print(residual.shape)
 
         out = self.conv1(x)
         out = self.bn1(out)
+        # print("out.shape")
+        # print(out.shape)
+        out = self.relu1(out)
+        out = self.conv2(out)
+        out = self.bn2(out)
 
-        if self.downsample is not None:
-            residual = self.downsample(x)
-
-        # print(out.shape) # torch.Size([4, 32, 20, 74])
-        # print(residual.shape) # torch.Size([4, 32, 20, 74])
         out += residual
-        out = self.relu(out)
+
+        out = self.relu2(out)
 
         return out
 
@@ -185,22 +217,24 @@ class ResBlock(nn.Module):
 def soft_argmin(cost_volume, batch_size, D=192):
 
     """Remove single-dimensional entries from the shape of an array."""
-    # print(cost_volume.shape)
-    cost_volume_D_squeeze = torch.squeeze(cost_volume)  # 10 16 70
-    softmax = nn.Softmax(dim=0)
-    disparity_softmax = softmax(cost_volume_D_squeeze)   # 10 16 70
-    # disparity_softmax = nn.Softmax(cost_volume_D_squeeze, dim=0)
+    # print("soft_argmin cost_volume.shape")
+    # print(cost_volume.shape)  # torch.Size([8, 1, 10, 9, 25])
+    cost_volume_D_squeeze = torch.squeeze(cost_volume)
 
-    # d_grid = np.cast(np.arange(D), np.float32)
-    # d_grid = np.reshape(d_grid, (-1, 1, 1))
+    # print("cost_volume_D_squeeze.shape")
+    # print(cost_volume_D_squeeze.shape)  # torch.Size([8, 10, 9, 25])
+    # softmax = nn.Softmax(dim=0)
+    softmax = nn.Softmax(dim=1)
+    disparity_softmax = softmax(cost_volume_D_squeeze)
+
     d_grid = torch.arange(cost_volume_D_squeeze.shape[1], dtype=torch.float)
     # print(d_grid.shape)
     d_grid = d_grid.reshape(-1, 1, 1)
     # d_grid = np.tile(d_grid, [1, 256, 512])
-    d_grid = d_grid.repeat((batch_size, 1, 16, 70))
+    d_grid = d_grid.repeat((batch_size, 1, 9, 25))
     d_grid = d_grid.to('cuda')
 
-    # print(disparity_softmax.shape)
+    # print(disparity_softmax.shape)  # torch.Size([8, 10, 9, 25])
     # print(d_grid.shape) # torch.Size([4, 10, 16, 70])  batch_size=4, disparity=10, H=16, W=70 ???
     tmp = disparity_softmax*d_grid
     arg_soft_min = torch.sum(tmp, dim=1, keepdim=True)  # TODO originally in GC-NET the dim=0 here (tf version)

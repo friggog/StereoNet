@@ -28,7 +28,7 @@ Please reference to [Ubuntu系统下Anaconda使用方法总结](https://www.cnbl
 #### Create Virtual Environment according to my environment index 
 ```conda env create -n your_env_name -f environment.yaml```
 
-## Trainng and Test
+## Training and Test
 #### Switch to the correct python environment
 ```
 conda activate your_env_name
