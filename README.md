@@ -1,7 +1,7 @@
 # Pytorch StereoNet
 Customized implementation of the [Stereonet guided hierarchical refinement for real-time edge-aware depth prediction](http://openaccess.thecvf.com/content_ECCV_2018/papers/Sameh_Khamis_StereoNet_Guided_Hierarchical_ECCV_2018_paper.pdf)
 
-![The network archtecture of StereoNet](https://github.com/zhixuanli/StereoNet/blob/master/stereo-net-structure.png)
+![The network archtecture of StereoNet](https://raw.githubusercontent.com/zhixuanli/StereoNet/master/stereo-net-structure.png)
 
 ## Attention: Not accomplished yet
 1. Till 2018-12-22, the [https://github.com/meteorshowers/StereoNet](https://github.com/meteorshowers/StereoNet) still not released the code.
@@ -23,10 +23,12 @@ Hope the coder can release the code as soon as possible so I can rectify the cod
 2. bash Anaconda3-5.3.1-Linux-x86_64.sh
 ```
 
-Please reference to [Ubuntu系统下Anaconda使用方法总结](https://www.cnblogs.com/QingHuan/p/9987069.html) for more information about install conda.
+Please reference to [Ubuntu系统下Anaconda使用方法总结](https://www.cnblogs.com/QingHuan/p/9987069.html) for more information about conda installation.
 
 #### Create Virtual Environment according to my environment index 
-```conda env create -n your_env_name -f environment.yaml```
+```
+conda env create -n your_env_name -f environment.yaml
+```
 
 ## Training and Test
 #### Switch to the correct python environment
@@ -35,7 +37,9 @@ conda activate your_env_name
 ```
 
 #### Start training and test
-```python train.py```
+```
+python train.py
+```
 
 
  

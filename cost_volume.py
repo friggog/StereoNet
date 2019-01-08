@@ -11,8 +11,6 @@ def CostVolume(input_feature, candidate_feature, position="left", method="subtra
             the conv counts of the first stage, the feature extraction stage
     """
     origin = input_feature  # img shape : [batch_size, H // 2**k, W // 2**k, channel]
-    # print("origin.shape")
-    # print(origin.shape)
     candidate = candidate_feature
     """ if the input image is the left image, and needs to compare with the right candidate.
         Then it should move to right and pad in left"""
@@ -26,18 +24,11 @@ def CostVolume(input_feature, candidate_feature, position="left", method="subtra
                 else:
                     """ proposed concat mathod """
                     leftMinusRightMove = torch.cat((origin, candidate), 1)
-                # print(leftMinusRightMove.shape)
                 leftMinusRightMove_List.append(leftMinusRightMove)
             else:
-                # zero_padding = np.zeros((batch_size, channel, disparity, H // 2**k))
-                zero_padding = np.zeros((batch_size, channel, disparity, origin.shape[3]))
+                zero_padding = np.zeros((origin.shape[0], channel, disparity, origin.shape[3]))
                 zero_padding = torch.from_numpy(zero_padding).float()
                 zero_padding = zero_padding.cuda()
-                # origin = origin.double()
-                # candidate = candidate.double()
-
-                # print(zero_padding.shape)
-                # print(origin.shape) # torch.Size([4, 32, 18, 72])
 
                 right_move = torch.cat((zero_padding, origin), 2)
 
@@ -47,13 +38,10 @@ def CostVolume(input_feature, candidate_feature, position="left", method="subtra
                 else:
                     """ concat mathod """
                     leftMinusRightMove = torch.cat((right_move[:, :, :origin.shape[2], :], candidate), 1)
-                # print(disparity)
-                # print(leftMinusRightMove.shape)
-                # print(len(leftMinusRightMove_List))
+
                 leftMinusRightMove_List.append(leftMinusRightMove)
         cost_volume = torch.stack(leftMinusRightMove_List, dim=1)
-        # print("cost_volume.shape")
-        # print(cost_volume.shape)  # torch.Size([8, 12, 32, 11, 27])
+
         return cost_volume
 
     elif position == "right":
@@ -76,7 +64,5 @@ def CostVolume(input_feature, candidate_feature, position="left", method="subtra
                 rightMinusLeftMove = left_move[:, :, :origin.shape[2], :] - candidate
                 rightMinusLeftMove_List.append(rightMinusLeftMove)
         cost_volume = torch.stack(rightMinusLeftMove_List, dim=1)
+
         return cost_volume
-
-
-
