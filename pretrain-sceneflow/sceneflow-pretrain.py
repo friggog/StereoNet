@@ -16,6 +16,7 @@ import math
 from dataloader import listflowfile as lt
 from dataloader import SceneFlowLoader as DA
 from models import *
+from torch.optim import RMSprop
 
 parser = argparse.ArgumentParser(description='PSMNet')
 parser.add_argument('--maxdisp', type=int ,default=160,
@@ -26,8 +27,8 @@ parser.add_argument('--datapath', default='/datasets/sceneflow/',
                     help='datapath')
 parser.add_argument('--epochs', type=int, default=20,
                     help='number of epochs to train')
-# parser.add_argument('--loadmodel', default= None, help='load model')
-parser.add_argument('--loadmodel', default='/checkpoints', help='load model')
+parser.add_argument('--loadmodel', default= None, help='load model')
+# parser.add_argument('--loadmodel', default='/checkpoints', help='load model')
 parser.add_argument('--savemodel', default='/checkpoints',
                     help='save model')
 parser.add_argument('--no-cuda', action='store_true', default=False,
@@ -71,7 +72,9 @@ if args.cuda:
     model = nn.DataParallel(model)
     model.cuda()
 
-optimizer = optim.Adam(model.parameters(), lr=0.001, betas=(0.9, 0.999))
+# optimizer = optim.Adam(model.parameters(), lr=0.001, betas=(0.9, 0.999))
+optimizer = RMSprop(model.parameters(), lr=1e-3, weight_decay=0.0001)
+scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
 epoch_start = 0
 total_train_loss_save = 0
 
@@ -163,27 +166,35 @@ def main():
     start_full_time = time.time()
     for epoch in range(epoch_start, args.epochs+1):
         print('This is %d-th epoch' %(epoch))
+        scheduler.step()
         total_train_loss = total_train_loss_save
-        adjust_learning_rate(optimizer,epoch)
+        # adjust_learning_rate(optimizer,epoch)
 
         ## training ##
         for batch_idx, (imgL_crop, imgR_crop, disp_crop_L) in enumerate(TrainImgLoader):
             start_time = time.time()
 
             loss = train(imgL_crop,imgR_crop, disp_crop_L)
-            print('Iter %d training loss = %.3f , time = %.2f' %(batch_idx, loss, time.time() - start_time))
+            if batch_idx % 10 == 0:
+                print('Iter %d training loss = %.3f , time = %.2f' %(batch_idx, loss, time.time() - start_time))
             total_train_loss += loss
         print('epoch %d total training loss = %.3f' %(epoch, total_train_loss/len(TrainImgLoader)))
 
         #SAVE
-        savefilename = root_path + args.savemodel+'/checkpoint_sceneflow.tar'
         torch.save({
             'state_dict': model.state_dict(),
             # 'train_loss': total_train_loss/len(TrainImgLoader),
             'total_train_loss': total_train_loss,
             'epoch': epoch + 1,
             'optimizer_state_dict': optimizer.state_dict(),
-        }, savefilename)
+        }, checkpoint_path)
+
+        # ----------  Test each epoch --------------
+        total_test_loss = 0
+        for batch_idx, (imgL, imgR, disp_L) in enumerate(TestImgLoader):
+            EPE = test(imgL, imgR, disp_L)
+            print('Iter %d EPE = %.3f' % (batch_idx, EPE))
+            total_test_loss += EPE
 
     print('full training time = %.2f HR' %((time.time() - start_full_time)/3600))
 

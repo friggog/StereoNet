@@ -1,7 +1,7 @@
 import torch.nn as nn
 import torch
 import torch.nn.functional as F
-from cost_volume import CostVolume
+from utils.cost_volume import CostVolume
 
 
 class StereoNet(nn.Module):

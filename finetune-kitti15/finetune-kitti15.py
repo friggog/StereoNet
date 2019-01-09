@@ -16,6 +16,8 @@ import skimage.transform
 import numpy as np
 import time
 import math
+from torch.optim import RMSprop
+
 # 禁止打印数组时使用省略号代替
 np.set_printoptions(threshold=np.inf)
 
@@ -84,7 +86,9 @@ if args.cuda:
     model = nn.DataParallel(model)
     model.cuda()
 
-optimizer = optim.Adam(model.parameters(), lr=0.001, betas=(0.9, 0.999))
+# optimizer = optim.Adam(model.parameters(), lr=0.001, betas=(0.9, 0.999))
+optimizer = RMSprop(model.parameters(), lr=1e-3, weight_decay=0.0001)
+scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
 epoch_start = 0
 total_train_loss_save = 0
 
@@ -154,36 +158,18 @@ def test(imgL,imgR,disp_true):
 
     pred_disp = output
 
-    # --------- From pretrain ---------------
-    mask1 = disp_true < args.maxdisp
+    mask = (disp_true > 0 and disp_true < args.maxdisp)
+    mask.detach_()
 
-    mask2 = (disp_true > 0)
-    mask2.detach_()
-
-    EPE1 = torch.mean(torch.abs(output[mask1] - disp_true[mask1]))  # end-point-error
-    EPE2 = torch.mean(torch.abs(output[mask2] - disp_true[mask2]))  # end-point-error
-
-    EPE = torch.mean(torch.abs(output - disp_true))  # end-point-error
-    print("EPE1")
-    print(EPE1)
-    print("EPE2")
-    print(EPE2)
-    print("EPE")
-    print(EPE)
-    # ---------------------------------------
+    EPE = torch.mean(torch.abs(output[mask] - disp_true[mask]))  # end-point-error
 
     # computing 3-px error rate#
     true_disp = disp_true
     index = np.argwhere(true_disp>0)
-    # print("index.shape")
-    # print(index.shape)
-    # print("disp_true.shape")
-    # print(disp_true.shape)
-    # print("pred_disp.shape")
-    # print(pred_disp.shape)
     disp_true[index[0][:], index[1][:], index[2][:]] = np.abs(true_disp[index[0][:], index[1][:], index[2][:]]-pred_disp[index[0][:], index[1][:], index[2][:]])
     correct = (disp_true[index[0][:], index[1][:], index[2][:]] < 3)|(disp_true[index[0][:], index[1][:], index[2][:]] < true_disp[index[0][:], index[1][:], index[2][:]]*0.05)
     torch.cuda.empty_cache()
+
     three_pixel_error_rate = 1-(float(torch.sum(correct))/float(len(index[0])))
 
     return three_pixel_error_rate, EPE
@@ -204,17 +190,21 @@ def main():
     start_full_time = time.time()
 
     for epoch in range(1, args.epochs+1):
+        print('This is %d-th epoch' % epoch)
+        scheduler.step()
+
         total_train_loss = 0
         total_test_three_pixel_error_rate = 0
         total_test_EPE = 0
-        adjust_learning_rate(optimizer,epoch)
+        # adjust_learning_rate(optimizer,epoch)
 
         ## training ##
         for batch_idx, (imgL_crop, imgR_crop, disp_crop_L) in enumerate(TrainImgLoader):
             start_time = time.time()
 
             loss = train(imgL_crop,imgR_crop, disp_crop_L)
-            print('Iter %d training loss = %.3f , time = %.2f' %(batch_idx, loss, time.time() - start_time))
+            if batch_idx % 10 == 0:
+                print('Iter %d training loss = %.3f , time = %.2f' %(batch_idx, loss, time.time() - start_time))
             total_train_loss += loss
 
             # TODO Only debug using
