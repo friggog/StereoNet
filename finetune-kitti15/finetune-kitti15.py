@@ -37,11 +37,10 @@ parser.add_argument('--datapath', default='/datasets/data_scene_flow/training/',
                     help='datapath')
 parser.add_argument('--epochs', type=int, default=300,
                     help='number of epochs to train')
-# parser.add_argument('--loadmodel', default='./trained/submission_model.tar',
-#                     help='load model')
-parser.add_argument('--loadmodel', default=root_path+'/log/checkpoint_sceneflow.tar', help='load model')
+
+parser.add_argument('--loadmodel', default=root_path+'/checkpoints/checkpoint_sceneflow.tar', help='load model')
 # parser.add_argument('--loadmodel', default=None, help='load model')
-parser.add_argument('--savemodel', default=root_path+"/log",
+parser.add_argument('--savemodel', default=root_path+"/checkpoints",
                     help='save model')
 parser.add_argument('--no-cuda', action='store_true', default=False,
                     help='enables CUDA training')
@@ -64,7 +63,7 @@ all_left_img, all_right_img, all_left_disp, test_left_img, test_right_img, test_
 batchSize = 16
 TrainImgLoader = torch.utils.data.DataLoader(
     DA.myImageFloder(all_left_img,all_right_img,all_left_disp, True),
-    batch_size=batchSize, shuffle= True, num_workers= 8, drop_last=True)
+    batch_size=batchSize, shuffle= True, num_workers= 12, drop_last=True)
 
 TestImgLoader = torch.utils.data.DataLoader(
     DA.myImageFloder(test_left_img,test_right_img,test_left_disp, False),
@@ -156,20 +155,21 @@ def test(imgL,imgR,disp_true):
     pred_disp = output
 
     # --------- From pretrain ---------------
-    mask = disp_true < args.maxdisp
+    mask1 = disp_true < args.maxdisp
 
-    # output = torch.squeeze(output3.data.cpu(), 1)[:, 4:, :]
+    mask2 = (disp_true > 0)
+    mask2.detach_()
 
+    EPE1 = torch.mean(torch.abs(output[mask1] - disp_true[mask1]))  # end-point-error
+    EPE2 = torch.mean(torch.abs(output[mask2] - disp_true[mask2]))  # end-point-error
 
-    # print("imgL.shape")
-    # print(imgL.shape)
-    # print("mask.shape")
-    # print(mask.shape)
-    # print("output.shape")
-    # print(output.shape)
-
-    # EPE = torch.mean(torch.abs(output[mask] - disp_true[mask]))  # end-point-error
     EPE = torch.mean(torch.abs(output - disp_true))  # end-point-error
+    print("EPE1")
+    print(EPE1)
+    print("EPE2")
+    print(EPE2)
+    print("EPE")
+    print(EPE)
     # ---------------------------------------
 
     # computing 3-px error rate#
@@ -205,7 +205,7 @@ def main():
 
     for epoch in range(1, args.epochs+1):
         total_train_loss = 0
-        total_test_loss = 0
+        total_test_three_pixel_error_rate = 0
         total_test_EPE = 0
         adjust_learning_rate(optimizer,epoch)
 
@@ -226,18 +226,19 @@ def main():
 
         ## Test ##
         for batch_idx, (imgL, imgR, disp_L) in enumerate(TestImgLoader):
-            test_loss, test_EPE = test(imgL,imgR, disp_L)
-            print('Iter %d 3-px error in val = %.3f, EPE = %.3f' %(batch_idx, test_loss*100, test_EPE))
-            total_test_loss += test_loss
+            test_three_pixel_error_rate, test_EPE = test(imgL,imgR, disp_L)
+            print('Iter %d 3-px error in val = %.3f, EPE = %.3f' %(batch_idx, test_three_pixel_error_rate*100, test_EPE))
+            total_test_three_pixel_error_rate += test_three_pixel_error_rate
             total_test_EPE += test_EPE
 
 
-        print('epoch %d total 3-px error in val = %.3f, EPE = %.3f' %(epoch, total_test_loss/len(TestImgLoader)*100, total_test_EPE/len(TestImgLoader)))
+        print('epoch %d total 3-px error in val = %.3f, EPE = %.3f' %(epoch, total_test_three_pixel_error_rate/len(TestImgLoader)*100, total_test_EPE/len(TestImgLoader)))
 
-        if total_test_loss/len(TestImgLoader)*100 > max_acc:
-            max_acc = total_test_loss/len(TestImgLoader)*100
+        acc = (1-total_test_three_pixel_error_rate/len(TestImgLoader))*100
+        if acc > max_acc:
+            max_acc = acc
             max_epo = epoch
-        print('MAX epoch %d total test error = %.3f' %(max_epo, max_acc))
+        print('MAX epoch %d test 3 pixel correct rate = %.3f' %(max_epo, max_acc))
 
         savefilename = root_path + '/log/checkpoint_finetune_kitti15.tar'
         torch.save({
@@ -247,6 +248,7 @@ def main():
             'epoch': epoch + 1,
             'optimizer_state_dict': optimizer.state_dict(),
         }, savefilename)
+        print("-- checkpoint saved --")
 
     print('full finetune time = %.2f HR' %((time.time() - start_full_time)/3600))
     print(max_epo)

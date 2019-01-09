@@ -24,11 +24,11 @@ parser.add_argument('--maxdisp', type=int ,default=160,
 parser.add_argument('--model', default='stereonet', help='select model')
 parser.add_argument('--datapath', default='/datasets/sceneflow/',
                     help='datapath')
-parser.add_argument('--epochs', type=int, default=10,
+parser.add_argument('--epochs', type=int, default=20,
                     help='number of epochs to train')
-parser.add_argument('--loadmodel', default= None, help='load model')
-# parser.add_argument('--loadmodel', default='/log', help='load model')
-parser.add_argument('--savemodel', default='/log',
+# parser.add_argument('--loadmodel', default= None, help='load model')
+parser.add_argument('--loadmodel', default='/checkpoints', help='load model')
+parser.add_argument('--savemodel', default='/checkpoints',
                     help='save model')
 parser.add_argument('--no-cuda', action='store_true', default=False,
                     help='enables CUDA training')
