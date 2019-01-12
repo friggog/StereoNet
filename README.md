@@ -40,6 +40,10 @@ Hope the coder can release the code as soon as possible so I can rectify the cod
 + CUDA Toolkit 10
 + numpy
 
+### Datasets:
+1. Pretrain: [SceneFlow](https://lmb.informatik.uni-freiburg.de/resources/datasets/SceneFlowDatasets.en.html)
+2. [KITTI 2015](http://www.cvlibs.net/datasets/kitti/eval_scene_flow.php?benchmark=stereo)
+
 ### You can use the anaconda virtual environment to quick start
 
 #### Install Anaconda
