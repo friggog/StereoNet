@@ -47,7 +47,6 @@ def CostVolume(input_feature, candidate_feature, position="left", method="subtra
     elif position == "right":
         rightMinusLeftMove_List = []
         for disparity in range(D // 2**k):
-            # print(disparity)
             if disparity == 0:
                 rightMinusLeftMove = origin - candidate
                 rightMinusLeftMove_List.append(rightMinusLeftMove)
@@ -55,10 +54,6 @@ def CostVolume(input_feature, candidate_feature, position="left", method="subtra
                 zero_padding = np.zeros((batch_size, channel, disparity, origin.shape[3]))
                 zero_padding = torch.from_numpy(zero_padding).float()
                 zero_padding = zero_padding.cuda()
-
-                # print(zero_padding.shape)
-                # print(origin.shape)  # torch.Size([4, 32, 18, 72])
-
 
                 left_move = torch.cat((zero_padding, origin), 2)
                 rightMinusLeftMove = left_move[:, :, :origin.shape[2], :] - candidate

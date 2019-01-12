@@ -49,8 +49,6 @@ def dataloader(filepath):
 
     # ========================= flying =======================
 
-    """
-
     flying_path = filepath + [x for x in image if x == 'frames_cleanpass'][0]
     flying_disp = filepath + [x for x in disp if x == 'frames_disparity'][0]
     flying_dir = flying_path+'/TRAIN/'
@@ -87,7 +85,6 @@ def dataloader(filepath):
 
                 if is_image_file(flying_dir+ss+'/'+ff+'/right/'+im):
                     test_right_img.append(flying_dir+ss+'/'+ff+'/right/'+im)
-    """
 
     # ========================= driving =======================
 

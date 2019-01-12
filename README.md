@@ -7,8 +7,33 @@ Customized implementation of the [Stereonet guided hierarchical refinement for r
 1. Till 2018-12-22, the [https://github.com/meteorshowers/StereoNet](https://github.com/meteorshowers/StereoNet) still not released the code.
 And that's the only version of the StereoNet now.
 Hope the coder can release the code as soon as possible so I can rectify the codes in my repository. 
-2. The approach of computing the cost volume in the StereoNet paper is subtracting the padding image and the other image. Here I changed it to concatenate the two images. If you want to change it to the paper's way, just set it in the train.py when you initialize the net.
-3. Only traning and testing on the KITTI 2015 train dataset is not enough, the best performance has achieved 74.5% (pixels with error smaller than 1). **Pretraining on the SceneFlow dataset is necessary**.
+2. The approach of computing the cost volume in the StereoNet paper is subtracting the padding image and the other image. Here I changed it to concatenate the two images. If you want to change it to the paper's way, just set it when you initialize the net.
+3. Only training and testing on the KITTI 2015 train dataset is not enough, the best performance has achieved 74.5% (pixels with error smaller than 1). After pretraining on SceneFlow and finetune on KITTI15, the acc achieves 90.054, not as good as the acc in paper. I have try hard to achieve the accuracy in paper, but still can't. Maybe some details are wrong. 
+ 
+
+### Experiment Results til now
+1. train and test on SceneFlow datasets:
+    + epoch 22 total training loss = 4.633
+    + average test EPE = 4.182
+2. finetune on kitti 15
+    + 300 epochs, max 3 pixel error rate = 80.893 on kitti val 
+        ```
+        optimizer = RMSprop(model.parameters(), lr=1e-3, weight_decay=0.0001)
+        scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
+        ```
+    + 300 epochs, max 3 pixel error rate = 83.527 on kitti val 
+        ```
+        optimizer = optim.Adam(model.parameters(), lr=0.001, betas=(0.9, 0.999))
+        scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
+        ```
+    + 300 epochs, max 3 pixel error rate = 90.054 on kitti val 
+        ```
+        optimizer = optim.Adam(model.parameters(), lr=0.001, betas=(0.9, 0.999))
+        if epoch <= 200:
+            lr = 0.001
+        else:
+            lr = 0.0001    
+        ```
 
 ## Pre-requirement
 + Pytorch 1.0.0
@@ -37,12 +62,18 @@ conda activate your_env_name
 ```
 
 #### Start training and test
+Pretrain on SceneFlow dataset
 ```
-python train.py
+cd pretrain-sceneflow
+python sceneflow-pretrain.py
 ```
 
+Finetune on KITTI 2015
+```
+cd finetune-kitti15
+python finetune-kitti15.py
+```
 
- 
 ## Coding Reference
 + [Pyramid Stereo Matching Network (CVPR2018)](https://github.com/JiaRenChang/PSMNet)
 + [gc-net for stereo matching by using pytorch](https://github.com/zyf12389/GC-Net)

@@ -1,25 +1,16 @@
 from __future__ import print_function
 import argparse
 import os
-import random
 import torch
 import torch.nn as nn
 import torch.nn.parallel
-import torch.backends.cudnn as cudnn
 import torch.optim as optim
 import torch.utils.data
 from torch.autograd import Variable
 import torch.nn.functional as F
-import skimage
-import skimage.io
-import skimage.transform
 import numpy as np
 import time
-import math
 from torch.optim import RMSprop
-
-# 禁止打印数组时使用省略号代替
-np.set_printoptions(threshold=np.inf)
 
 from dataloader import KITTIloader2015 as ls
 from dataloader import KITTILoader as DA
@@ -28,16 +19,14 @@ from models import *
 
 root_path = "/home/oliver/PycharmProjects/StereoNet"
 
-parser = argparse.ArgumentParser(description='PSMNet')
+parser = argparse.ArgumentParser(description='StereoNet')
 parser.add_argument('--maxdisp', type=int ,default=160,
                     help='maxium disparity')
-# parser.add_argument('--model', default='stackhourglass', help='select model')
-parser.add_argument('--model', default='stereonet', help='select model')
 parser.add_argument('--datatype', default='2015',
                     help='datapath')
 parser.add_argument('--datapath', default='/datasets/data_scene_flow/training/',
                     help='datapath')
-parser.add_argument('--epochs', type=int, default=300,
+parser.add_argument('--epochs', type=int, default=2000,
                     help='number of epochs to train')
 
 parser.add_argument('--loadmodel', default=root_path+'/checkpoints/checkpoint_sceneflow.tar', help='load model')
@@ -71,41 +60,21 @@ TestImgLoader = torch.utils.data.DataLoader(
     DA.myImageFloder(test_left_img,test_right_img,test_left_disp, False),
     batch_size=batchSize, shuffle= False, num_workers= 4, drop_last=False)
 
-if args.model == 'stackhourglass':
-    model = stackhourglass(args.maxdisp)
-elif args.model == 'basic':
-    model = basic(args.maxdisp)
-elif args.model == 'stereonet':
-    cost_volume_method = "subtract"
-    model = stereonet(batch_size=batchSize, cost_volume_method=cost_volume_method)
-    print("-- model using stereonet --")
-else:
-    print('no model')
+cost_volume_method = "subtract"
+# cost_volume_method = "concat"
+model = stereonet(batch_size=batchSize, cost_volume_method=cost_volume_method)
+print("-- model using stereonet --")
 
 if args.cuda:
     model = nn.DataParallel(model)
     model.cuda()
 
-# optimizer = optim.Adam(model.parameters(), lr=0.001, betas=(0.9, 0.999))
-optimizer = RMSprop(model.parameters(), lr=1e-3, weight_decay=0.0001)
+optimizer = optim.Adam(model.parameters(), lr=0.001, betas=(0.9, 0.999))
+# optimizer = RMSprop(model.parameters(), lr=1e-3, weight_decay=0.0001)
 scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
-epoch_start = 0
-total_train_loss_save = 0
-
-if args.loadmodel is not None:
-    state_dict = torch.load(args.loadmodel)
-    model.load_state_dict(state_dict['state_dict'])
 
 print('Number of model parameters: {}'.format(sum([p.data.nelement() for p in model.parameters()])))
 
-checkpoint_path = root_path + "/log/checkpoint_sceneflow.tar"
-if args.loadmodel is not None and os.path.exists(checkpoint_path):
-    state_dict = torch.load(checkpoint_path)
-    model.load_state_dict(state_dict['state_dict'])
-    optimizer.load_state_dict(state_dict['optimizer_state_dict'])
-    epoch_start = state_dict['epoch']
-    total_train_loss_save = state_dict['total_train_loss']
-    print("-- checkpoint loaded --")
 
 def train(imgL,imgR,disp_L):
     model.train()
@@ -123,27 +92,15 @@ def train(imgL,imgR,disp_L):
 
     optimizer.zero_grad()
 
-    if args.model == 'stackhourglass':
-        output1, output2, output3 = model(imgL,imgR)
-        output1 = torch.squeeze(output1,1)
-        output2 = torch.squeeze(output2,1)
-        output3 = torch.squeeze(output3,1)
-        loss = 0.5*F.smooth_l1_loss(output1[mask], disp_true[mask], size_average=True) + 0.7*F.smooth_l1_loss(output2[mask], disp_true[mask], size_average=True) + F.smooth_l1_loss(output3[mask], disp_true[mask], size_average=True)
-    elif args.model == 'basic':
-        output = model(imgL,imgR)
-        output = torch.squeeze(output,1)
-        loss = F.smooth_l1_loss(output[mask], disp_true[mask], size_average=True)
-    elif args.model == 'stereonet':
-        output = model(imgL, imgR)
-        # print("output.shape")
-        # print(output.shape)  # torch.Size([4, 1, 256, 512])
-        output = torch.squeeze(output, 1)
-        loss = F.smooth_l1_loss(output[mask], disp_true[mask], size_average=True)
+    output = model(imgL, imgR)
+    output = torch.squeeze(output, 1)
+    loss = F.smooth_l1_loss(output[mask], disp_true[mask], size_average=True)
 
     loss.backward()
     optimizer.step()
 
     return loss.data.item()
+
 
 def test(imgL,imgR,disp_true):
     model.eval()
@@ -158,11 +115,6 @@ def test(imgL,imgR,disp_true):
 
     pred_disp = output
 
-    mask = (disp_true > 0 and disp_true < args.maxdisp)
-    mask.detach_()
-
-    EPE = torch.mean(torch.abs(output[mask] - disp_true[mask]))  # end-point-error
-
     # computing 3-px error rate#
     true_disp = disp_true
     index = np.argwhere(true_disp>0)
@@ -172,73 +124,72 @@ def test(imgL,imgR,disp_true):
 
     three_pixel_error_rate = 1-(float(torch.sum(correct))/float(len(index[0])))
 
-    return three_pixel_error_rate, EPE
+    return three_pixel_error_rate
 
 def adjust_learning_rate(optimizer, epoch):
     if epoch <= 200:
         lr = 0.001
     else:
         lr = 0.0001
-    print(lr)
+    print("lr = %f" % lr)
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
 
 
 def main():
-    max_acc=0
-    max_epo=0
+    epoch_start = 0
+    max_acc = 0
+    max_epo = 0
+    checkpoint_path = root_path + "/checkpoints/checkpoint_finetune_kitti15.tar"
+    if args.loadmodel is not None and os.path.exists(checkpoint_path):
+        state_dict = torch.load(checkpoint_path)
+        model.load_state_dict(state_dict['state_dict'])
+        optimizer.load_state_dict(state_dict['optimizer_state_dict'])
+        epoch_start = state_dict['epoch']
+        max_acc = state_dict['max_acc']
+        max_epo = state_dict['max_epoch']
+        print("-- checkpoint loaded --")
+
     start_full_time = time.time()
 
-    for epoch in range(1, args.epochs+1):
+    for epoch in range(epoch_start, args.epochs+1):
         print('This is %d-th epoch' % epoch)
-        scheduler.step()
+        # scheduler.step()
+        # print("learning rate : %f " % scheduler.get_lr()[0])
+        adjust_learning_rate(optimizer, epoch)
 
         total_train_loss = 0
         total_test_three_pixel_error_rate = 0
-        total_test_EPE = 0
-        # adjust_learning_rate(optimizer,epoch)
 
         ## training ##
         for batch_idx, (imgL_crop, imgR_crop, disp_crop_L) in enumerate(TrainImgLoader):
-            start_time = time.time()
-
             loss = train(imgL_crop,imgR_crop, disp_crop_L)
-            if batch_idx % 10 == 0:
-                print('Iter %d training loss = %.3f , time = %.2f' %(batch_idx, loss, time.time() - start_time))
             total_train_loss += loss
-
-            # TODO Only debug using
-            # for batch_idx, (imgL, imgR, disp_L) in enumerate(TestImgLoader):
-            #     test_loss, test_EPE = test(imgL, imgR, disp_L)
-            #     print('Iter %d 3-px error in val = %.3f, EPE = %.3f' % (batch_idx, test_loss * 100, test_EPE))
 
         print('epoch %d average training loss = %.3f' % (epoch, total_train_loss/len(TrainImgLoader)))
 
         ## Test ##
         for batch_idx, (imgL, imgR, disp_L) in enumerate(TestImgLoader):
-            test_three_pixel_error_rate, test_EPE = test(imgL,imgR, disp_L)
-            print('Iter %d 3-px error in val = %.3f, EPE = %.3f' %(batch_idx, test_three_pixel_error_rate*100, test_EPE))
+            test_three_pixel_error_rate = test(imgL,imgR, disp_L)
             total_test_three_pixel_error_rate += test_three_pixel_error_rate
-            total_test_EPE += test_EPE
 
-
-        print('epoch %d total 3-px error in val = %.3f, EPE = %.3f' %(epoch, total_test_three_pixel_error_rate/len(TestImgLoader)*100, total_test_EPE/len(TestImgLoader)))
+        print('epoch %d total 3-px error in val = %.3f' %(epoch, total_test_three_pixel_error_rate/len(TestImgLoader)*100))
 
         acc = (1-total_test_three_pixel_error_rate/len(TestImgLoader))*100
         if acc > max_acc:
             max_acc = acc
             max_epo = epoch
+            savefilename = root_path + '/checkpoints/checkpoint_finetune_kitti15.tar'
+            torch.save({
+                'state_dict': model.state_dict(),
+                'total_train_loss': total_train_loss,
+                'epoch': epoch + 1,
+                'optimizer_state_dict': optimizer.state_dict(),
+                'max_acc': max_acc,
+                'max_epoch': max_epo
+            }, savefilename)
+            print("-- max acc checkpoint saved --")
         print('MAX epoch %d test 3 pixel correct rate = %.3f' %(max_epo, max_acc))
-
-        savefilename = root_path + '/log/checkpoint_finetune_kitti15.tar'
-        torch.save({
-            'state_dict': model.state_dict(),
-            # 'train_loss': total_train_loss/len(TrainImgLoader),
-            'total_train_loss': total_train_loss,
-            'epoch': epoch + 1,
-            'optimizer_state_dict': optimizer.state_dict(),
-        }, savefilename)
-        print("-- checkpoint saved --")
 
     print('full finetune time = %.2f HR' %((time.time() - start_full_time)/3600))
     print(max_epo)
