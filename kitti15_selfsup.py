@@ -98,8 +98,8 @@ class Wrapper():
 
     def test(self, imgL, imgR, dispL, dispR):
         self.model.eval()
-        imgL = Variable(torch.FloatTensor(imgL))
-        imgR = Variable(torch.FloatTensor(imgR))
+        imgL = Variable(torch.FloatTensor(imgL)) * 0.5 + 0.5
+        imgR = Variable(torch.FloatTensor(imgR)) * 0.5 + 0.5
         imgL, imgR = imgL.cuda(), imgR.cuda()
         with torch.no_grad():
             outputL, outputR = self.model(imgL, imgR)
@@ -130,10 +130,10 @@ class Wrapper():
 
         outputL = torch.squeeze(outputL.data.cpu(), 1)
         outputR = torch.squeeze(outputR.data.cpu(), 1)
-        outputL = outputL[dispL > 0]
-        outputR = outputR[dispR > 0]
-        dispL = dispL[dispL > 0]
-        dispR = dispR[dispR > 0]
+        # outputL = outputL[dispL.squeeze(1) > 0]
+        # outputR = outputR[dispR.squeeze(1) > 0]
+        # dispL = dispL[dispL.squeeze(1) > 0]
+        # dispR = dispR[dispR.squeeze(1) > 0]
         lossR = F.smooth_l1_loss(outputR * self.im_scale, dispR, reduction='mean')
         lossL = F.smooth_l1_loss(outputL * self.im_scale, dispL, reduction='mean')
         loss = (lossR + lossL) / 2
@@ -179,7 +179,7 @@ class Wrapper():
 
     #     return (three_pixel_error_rate_L + three_pixel_error_rate_R) / 2
 
-    def main(self, batch_size, epochs, checkpoint_name, start_at):
+    def main(self, batch_size, epochs, checkpoint_name, start_at, test_only):
         root_path = "D:/StereoNet"
 
         torch.manual_seed(0)
@@ -191,7 +191,8 @@ class Wrapper():
             './datasets/kitti15/')
 
         TrainImgLoader = torch.utils.data.DataLoader(
-            ImageLoaders.KittiImageLoader(all_left_img, all_right_img, True),
+            ImageLoaders.KittiImageLoader(all_left_img, all_right_img,
+                                          all_right_disp, all_left_disp, True),
             batch_size=batch_size, shuffle=True, num_workers=12, drop_last=True)
 
         TestImgLoader = torch.utils.data.DataLoader(
@@ -208,7 +209,7 @@ class Wrapper():
         self.model.cuda()
 
         self.optimizer = optim.Adam(
-            self.model.parameters(), lr=0.0001, betas=(0.9, 0.999))
+            self.model.parameters(), lr=0.001, betas=(0.9, 0.999))
 
         print('Number of model parameters: {}'.format(
             sum([p.data.nelement() for p in self.model.parameters()])))
@@ -220,7 +221,7 @@ class Wrapper():
         if os.path.exists(checkpoint_path):
             state_dict = torch.load(checkpoint_path)
             self.model.load_state_dict(state_dict['state_dict'])
-            # self.optimizer.load_state_dict(state_dict['optimizer_state_dict'])
+            self.optimizer.load_state_dict(state_dict['optimizer_state_dict'])
             epoch_start = state_dict['epoch']
             print("-- checkpoint loaded --")
 
@@ -228,57 +229,62 @@ class Wrapper():
             epoch_start = start_at
 
         if epoch_start > 0:
-            self.scheduler = torch.optim.lr_scheduler.ExponentialLR(
-                self.optimizer, gamma=0.9, last_epoch=epoch_start -1)
+            self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=8, gamma=0.1, last_epoch=epoch_start -1)
+            # self.scheduler = torch.optim.lr_scheduler.ExponentialLR(
+            #     self.optimizer, gamma=0.9, last_epoch=epoch_start -1)
         else:
-            self.scheduler = torch.optim.lr_scheduler.ExponentialLR(
-                self.optimizer, gamma=0.9)
+            self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=8, gamma=0.1)
+            # self.scheduler = torch.optim.lr_scheduler.ExponentialLR(
+            #     self.optimizer, gamma=0.9)
 
-        start_full_time = time.time()
+        if not test_only:
+            start_full_time = time.time()
 
-        for epoch in range(epoch_start, epochs +1):
-            print('This is %d-th epoch' % epoch)
-            self.scheduler.step()
-            print("learning rate : %f " % self.scheduler.get_lr()[0])
+            for epoch in range(epoch_start, epochs +1):
+                print('This is %d-th epoch' % epoch)
+                self.scheduler.step()
+                print("learning rate : %f " % self.scheduler.get_lr()[0])
 
-            total_train_loss = 0
-            total_test_three_pixel_error_rate = 0
+                total_train_loss = 0
+                total_test_three_pixel_error_rate = 0
 
-            ## training ##
-            for batch_idx, (imgL_crop, imgR_crop, _, _) in enumerate(TrainImgLoader):
-                loss = self.train(imgL_crop, imgR_crop)
-                total_train_loss += loss
+                ## training ##
+                for batch_idx, (imgL_crop, imgR_crop, _, _) in enumerate(TrainImgLoader):
+                    loss = self.train(imgL_crop, imgR_crop)
+                    total_train_loss += loss
+                    if batch_idx % 50 == 0:
+                        print('=> Step %i loss %f' % (batch_idx, loss))
 
-            print('epoch %d average training loss = %.3f' %
-                  (epoch, total_train_loss /len(TrainImgLoader)))
+                print('Epoch %d average training loss = %.3f' %
+                      (epoch, total_train_loss /len(TrainImgLoader)))
 
-            ## Test ##
-            # for batch_idx, (imgL, imgR, dispL, dispR) in enumerate(TestImgLoader):
-            #     test_three_pixel_error_rate = self.test(imgL, imgR, dispL, dispR)
-            #     total_test_three_pixel_error_rate += test_three_pixel_error_rate
+                ## Test ##
+                # for batch_idx, (imgL, imgR, dispL, dispR) in enumerate(TestImgLoader):
+                #     test_three_pixel_error_rate = self.test(imgL, imgR, dispL, dispR)
+                #     total_test_three_pixel_error_rate += test_three_pixel_error_rate
 
-            # print('epoch %d total 3-px error in val = %.3f' %
-            #       (epoch, total_test_three_pixel_error_rate /len(TestImgLoader) *100))
+                # print('epoch %d total 3-px error in val = %.3f' %
+                #       (epoch, total_test_three_pixel_error_rate /len(TestImgLoader) *100))
 
-            # acc = (1 -total_test_three_pixel_error_rate /len(TestImgLoader)) *100
-            # if acc > max_acc:
-            # max_acc = acc
-            # max_epo = epoch
-            savefilename = root_path + '/checkpoints/checkpoint_finetune_kitti15.tar'
-            torch.save({
-                'state_dict': self.model.state_dict(),
-                'total_train_loss': total_train_loss,
-                'epoch': epoch + 1,
-                'optimizer_state_dict': self.optimizer.state_dict(),
-                # 'max_acc': max_acc,
-                # 'max_epoch': max_epo
-            }, savefilename)
-            # print("-- max acc checkpoint saved --")
-            # print('MAX epoch %d test 3 pixel correct rate = %.3f' %
-            # (max_epo, max_acc))
+                # acc = (1 -total_test_three_pixel_error_rate /len(TestImgLoader)) *100
+                # if acc > max_acc:
+                # max_acc = acc
+                # max_epo = epoch
+                savefilename = root_path + '/checkpoints/checkpoint_finetune_kitti15.tar'
+                torch.save({
+                    'state_dict': self.model.state_dict(),
+                    'total_train_loss': total_train_loss,
+                    'epoch': epoch + 1,
+                    'optimizer_state_dict': self.optimizer.state_dict(),
+                    # 'max_acc': max_acc,
+                    # 'max_epoch': max_epo
+                }, savefilename)
+                # print("-- max acc checkpoint saved --")
+                # print('MAX epoch %d test 3 pixel correct rate = %.3f' %
+                # (max_epo, max_acc))
 
-        print('full finetune time = %.2f HR' %
-              ((time.time() - start_full_time) /3600))
+            print('full finetune time = %.2f HR' %
+                  ((time.time() - start_full_time) /3600))
 
         total_test_loss = 0
         for batch_idx, (imgL, imgR, dispL, dispR) in enumerate(TestImgLoader):
@@ -289,10 +295,11 @@ class Wrapper():
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--load', dest='checkpoint_name', action='store', type=str, default="")
-    parser.add_argument('--epochs', dest='epochs', action='store', type=int, default=16)
+    parser.add_argument('--load', dest='checkpoint_name', action='store', type=str, default="sceneflow_checkpoint.tar")
+    parser.add_argument('--epochs', dest='epochs', action='store', type=int, default=32)
     parser.add_argument('--batch_size', dest='batch_size', action='store', type=int, default=6)
     parser.add_argument('--start-at', dest='start_at', action='store', default=-1, type=int)
+    parser.add_argument('--test-only', dest='test_only', action='store_true')
     args = parser.parse_args()
     a = Wrapper()
-    a.main(args.batch_size, args.epochs, args.checkpoint_name, args.start_at)
+    a.main(args.batch_size, args.epochs, args.checkpoint_name, args.start_at, args.test_only)

@@ -71,7 +71,7 @@ class SceneFlowImageLoader(BaseImageLoader):
                 transforms.ToTensor(),
                 transforms.Normalize(BASE_NORM_STATS['mean'], BASE_NORM_STATS['std'])])
 
-            th, tw = 256, 512
+            th, tw = 512, 960
 
             x1 = random.randint(0, w - tw)
             y1 = random.randint(0, h - th)
@@ -154,10 +154,10 @@ class KittiImageLoader(BaseImageLoader):
             left_img = left_img.crop((x1, y1, x1 + tw, y1 + th))
             right_img = right_img.crop((x1, y1, x1 + tw, y1 + th))
 
-            dataL = np.ascontiguousarray(dataL, dtype=np.float32) /256
-            dataL = dataL[y1:y1 + th, x1:x1 + tw]
-            dataR = np.ascontiguousarray(dataR, dtype=np.float32) /256
-            dataR = dataR[y1:y1 + th, x1:x1 + tw]
+            # dataL = np.ascontiguousarray(dataL, dtype=np.float32)
+            dataL = dataL[:, y1:y1 + th, x1:x1 + tw]
+            # dataR = np.ascontiguousarray(dataR, dtype=np.float32)
+            dataR = dataR[:, y1:y1 + th, x1:x1 + tw]
 
             if disp_L == '':
                 t = transforms.Compose([
@@ -174,10 +174,12 @@ class KittiImageLoader(BaseImageLoader):
             left_img = left_img.crop((w -1232, h -368, w, h))
             right_img = right_img.crop((w -1232, h -368, w, h))
 
-            dataL = dataL.crop((w -1232, h -368, w, h))
-            dataL = np.ascontiguousarray(dataL, dtype=np.float32) /256
-            dataR = dataR.crop((w -1232, h -368, w, h))
-            dataR = np.ascontiguousarray(dataR, dtype=np.float32) /256
+            # dataL = dataL.crop((w -1232, h -368, w, h))
+            # dataL = np.ascontiguousarray(dataL, dtype=np.float32)
+            dataL = dataL[:, h -368:h, w -1232:w]
+            # # dataR = dataR.crop((w -1232, h -368, w, h))
+            # dataR = np.ascontiguousarray(dataR, dtype=np.float32)
+            dataR = dataR[:, h -368:h, w -1232:w]
 
             t = transforms.Compose([
                 transforms.ToTensor(),

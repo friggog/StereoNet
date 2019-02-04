@@ -2,7 +2,7 @@ import torch
 import numpy as np
 
 
-def CostVolume(input_feature, candidate_feature, position="left", method="subtract", k=4, channel=32, D=192):
+def CostVolume(input_feature, candidate_feature, position="left", method="subtract", k=4, channel=32, D=256):
     origin = input_feature
     candidate = candidate_feature
     """ if the input image is the left image, and needs to compare with the right candidate.

@@ -125,7 +125,7 @@ class WrapperToStopWeirdStuffHappening:
         tgrey = transforms.ToPILImage(mode='L')
         trgb = transforms.ToPILImage(mode='RGB')
 
-        i = 3  # output one of each batch
+        i = 0  # output one of each batch
         norm = dispL[i].max(0)[0]
         norm = norm.max(0)[0].data.cpu() / self.im_scale
         dl = tgrey(outputL[i].data.cpu() / norm)
@@ -175,10 +175,10 @@ class WrapperToStopWeirdStuffHappening:
                     start_time = time.time()
                     loss = self.train(imgL_crop, imgR_crop,
                                       disp_crop_L, disp_crop_R)
-                    if batch_idx % 100 == 0:
-                        print('Iter %d training loss = %.3f , time = %.2f' %
-                              (batch_idx, loss, time.time() - start_time))
                     avg_train_loss += loss
+                    if batch_idx % 100 == 0:
+                        print('Iter %d ave training loss = %.3f , time = %.2f' %
+                              (batch_idx, avg_train_loss/(batch_idx+1), time.time() - start_time))
                 print('epoch %d total training loss = %.3f' %
                       (epoch, avg_train_loss /len(self.TrainImgLoader)))
 
@@ -219,7 +219,7 @@ class WrapperToStopWeirdStuffHappening:
         self.TestImgLoader = torch.utils.data.DataLoader(
             ImageLoaders.SceneFlowImageLoader(test_left_img, test_right_img,
                                               test_left_disp, test_right_disp, False),
-            batch_size=batchSize, shuffle=False, num_workers=12, drop_last=False)
+            batch_size=batchSize, shuffle=False, num_workers=4, drop_last=False)
 
         cost_volume_method = "subtract"
         self.model = stereonet(batch_size=batchSize,
@@ -229,9 +229,8 @@ class WrapperToStopWeirdStuffHappening:
         self.model = nn.DataParallel(self.model)
         self.model.cuda()
 
-        self.optimizer = optim.Adam(
-            self.model.parameters(), lr=0.0001, betas=(0.9, 0.999), eps=1e-08)
-        # optimizer = optim.RMSprop(model.parameters(), lr=1e-3, weight_decay=0.0001)
+        # self.optimizer = optim.Adam(self.model.parameters(), lr=0.001, betas=(0.9, 0.999), eps=1e-08)
+        self.optimizer = optim.RMSprop(self.model.parameters(), lr=0.001, weight_decay=0.0001)
         self.epoch_start = 0
 
         # if args.loadmodel is not None:
@@ -248,10 +247,12 @@ class WrapperToStopWeirdStuffHappening:
 
         if self.epoch_start > 0:
             self.scheduler = torch.optim.lr_scheduler.ExponentialLR(
-                self.optimizer, gamma=0.9, last_epoch=self.epoch_start -1)
+                self.optimizer, gamma=0.9, last_epoch=self.epoch_start - 1)
+            # self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=8, gamma=0.1, last_epoch=self.epoch_start -1)
         else:
             self.scheduler = torch.optim.lr_scheduler.ExponentialLR(
                 self.optimizer, gamma=0.9)
+            # self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=8, gamma=0.1)
 
         print('Number of model parameters: {}'.format(
             sum([p.data.nelement() for p in self.model.parameters()])))
@@ -261,9 +262,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--load', dest='load', action='store_true')
     parser.add_argument('--test-only', dest='skip_training', action='store_true')
-    parser.add_argument('--epochs', dest='epochs', action='store', default=16, type=int)
+    parser.add_argument('--epochs', dest='epochs', action='store', default=32, type=int)
     parser.add_argument('--start-at', dest='start_at', action='store', default=-1, type=int)
-    parser.add_argument('--batch-size', dest='batch_size', action='store', default=6, type=int)
+    parser.add_argument('--batch-size', dest='batch_size', action='store', default=1, type=int)
     args = parser.parse_args()
     a = WrapperToStopWeirdStuffHappening(args.epochs, args.batch_size, args.load, args.start_at)
     a.main(not args.skip_training)

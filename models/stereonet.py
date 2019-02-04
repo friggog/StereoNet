@@ -2,6 +2,7 @@ import torch.nn as nn
 import torch
 import torch.nn.functional as F
 from utils.cost_volume import CostVolume
+import torchvision.transforms as transforms
 
 
 class StereoNet(nn.Module):
@@ -16,7 +17,7 @@ class StereoNet(nn.Module):
         elif cost_volume_method == "concat":
             cost_volume_channel = 64
         else:
-            print("cost_volume_method is not right")
+            raise Exception("cost_volume_method is not right")
 
         self.downsampling = nn.Sequential(
             nn.Conv2d(3, 32, 5, stride=2, padding=2),
@@ -26,6 +27,8 @@ class StereoNet(nn.Module):
         )
 
         self.res = nn.Sequential(
+            ResBlock(32, 32),
+            ResBlock(32, 32),
             ResBlock(32, 32),
             ResBlock(32, 32),
             ResBlock(32, 32),
@@ -42,7 +45,6 @@ class StereoNet(nn.Module):
             nn.Conv3d(32, 1, 3, padding=1),
         )
 
-        # TODO what is the input channel size
         self.refine = nn.Sequential(
             nn.Conv2d(4, 32, 3, padding=1),
             ResBlock(32, 32, dilation=1),
@@ -51,8 +53,7 @@ class StereoNet(nn.Module):
             ResBlock(32, 32, dilation=8),
             ResBlock(32, 32, dilation=1),
             ResBlock(32, 32, dilation=1),
-            nn.Conv2d(32, 1, 3, padding=1),
-            nn.ReLU(),
+            nn.Conv2d(32, 1, 3, padding=1)
         )
 
     def forward_once_1(self, x):
@@ -85,58 +86,36 @@ class StereoNet(nn.Module):
         d_high_l = nn.functional.interpolate(disparity_low_l, [left.shape[2], left.shape[3]])
         d_high_r = nn.functional.interpolate(disparity_low_r, [right.shape[2], right.shape[3]])
 
-        # print(disparity_low_l.shape) # torch.Size([4, 1, 16, 70])
-        # print("d_high.shape")  # torch.Size([4, 1, 375, 1242])
-        # print(d_high.shape)  # torch.Size([4, 1, 375, 1242])
-        # print(left.shape)
-
         d_concat_l = torch.cat([d_high_l, left], dim=1)
         d_concat_r = torch.cat([d_high_r, right], dim=1)
-
-        # print("d_concat.shape")
-        # print(d_concat.shape)  # torch.Size([8, 4, 256, 512])
 
         d_refined_l = self.refine(d_concat_l)
         d_refined_r = self.refine(d_concat_r)
 
-        # print("d_refined")
-        # print(d_refined.shape)
-
         return d_refined_l, d_refined_r
 
     def forward(self, left, right):
-        # print("left.shape")
-        # print(left.shape)
         left_feature, right_feature = self.forward_stage1(left, right)
-        # print("left_feature.shape")
-        # print(left_feature.shape)
         disparity_low_l, disparity_low_r = self.forward_stage2(
             left_feature, right_feature)
-        # print("left.shape")
-        # print(left.shape)  # torch.Size([8, 3, 256, 512])
         d_refined_l, d_refined_r = self.forward_stage3(
             disparity_low_l, disparity_low_r, left, right)
 
-        # print("d_refined.shape")
-        # print(d_refined.shape)  # torch.Size([8, 1, 256, 512])
-
         # tensor = d_refined_l
-        # unloader = transforms.ToPILImage()
-        # image = tensor.cpu().clone()
+        # t = transforms.ToPILImage()
+        # image = disparity_low_l[0].cpu().clone()
         # image = image.squeeze(1)
-        # image = unloader(image)
+        # image = t(image)
         # image.show()
+        # input()
 
-        # TODO : the paper says here should add them up, check it later
-        # d_final_l = nn.ReLU(disparity_low_r + d_refined_l)
-        # d_final_r = nn.ReLU(disparity_low_r + d_refined_r)
+        d_high_l = nn.functional.interpolate(disparity_low_l, [left.shape[2], left.shape[3]])
+        d_high_r = nn.functional.interpolate(disparity_low_r, [right.shape[2], right.shape[3]])
 
-        # limit to [0, 1]
-        # d_refined_l = nn.Sigmoid()(d_refined_l)
-        # d_refined_r = nn.Sigmoid()(d_refined_r)
+        d_final_l = nn.ReLU()(d_high_l + d_refined_l)
+        d_final_r = nn.ReLU()(d_high_r + d_refined_r)
 
-        # return d_final_l, d_final_r
-        return d_refined_l, d_refined_r
+        return d_final_l, d_final_r
 
 
 class MetricBlock(nn.Module):
@@ -156,26 +135,15 @@ class MetricBlock(nn.Module):
 class ResBlock(nn.Module):
     def __init__(self, in_channel, out_channel, dilation=1, stride=1, downsample=None):
         super(ResBlock, self).__init__()
-
-        # To keep the shape of input and output same when dilation conv, we should compute the padding:
-        # Reference:
-        #   https://discuss.pytorch.org/t/how-to-keep-the-shape-of-input-and-output-same-when-dilation-conv/14338
-        # padding = [(o-1)*s+k+(k-1)*(d-1)-i]/2, here the i is input size, and o is output size.
-        # set o = i, then padding = [i*(s-1)+k+(k-1)*(d-1)]/2 = [k+(k-1)*(d-1)]/2      , stride always equals 1
-        # if dilation != 1:
-        #     padding = (3+(3-1)*(dilation-1))/2
         padding = dilation
-
         self.conv1 = nn.Conv2d(in_channel, out_channel, kernel_size=3, stride=stride,
                                padding=padding, dilation=dilation, bias=False)
         self.bn1 = nn.BatchNorm2d(out_channel)
         self.relu1 = nn.LeakyReLU(negative_slope=0.2, inplace=True)
-
         self.conv2 = nn.Conv2d(out_channel, out_channel, kernel_size=3, stride=stride,
                                padding=padding, dilation=dilation, bias=False)
         self.bn2 = nn.BatchNorm2d(out_channel)
         self.relu2 = nn.LeakyReLU(negative_slope=0.2, inplace=True)
-
         self.downsample = downsample
         self.stride = stride
         self.in_ch = in_channel
@@ -186,35 +154,26 @@ class ResBlock(nn.Module):
     def forward(self, x):
         # print("in_ch = %d, out_ch = %d, p = %d, d = %d, s = %s" % (self.in_ch, self.out_ch, self.p, self.d, self.stride))
         residual = x
-        # print("residual.shape")
-        # print(residual.shape)
-
         out = self.conv1(x)
         out = self.bn1(out)
-        # print("out.shape")
-        # print(out.shape)
         out = self.relu1(out)
         out = self.conv2(out)
         out = self.bn2(out)
-
         out += residual
-
         out = self.relu2(out)
-
         return out
 
 
 def soft_argmin(cost_volume):
     """Remove single-dimensional entries from the shape of an array."""
-    cost_volume_D_squeeze = torch.squeeze(cost_volume)
+    cost_volume_D_squeeze = torch.squeeze(cost_volume, dim=1)
 
     softmax = nn.Softmax(dim=1)
     disparity_softmax = softmax(cost_volume_D_squeeze)
 
     d_grid = torch.arange(cost_volume_D_squeeze.shape[1], dtype=torch.float)
     d_grid = d_grid.reshape(-1, 1, 1)
-    d_grid = d_grid.repeat(
-        (cost_volume.shape[0], 1, cost_volume.shape[3], cost_volume.shape[4]))
+    d_grid = d_grid.repeat((cost_volume.shape[0], 1, cost_volume.shape[3], cost_volume.shape[4]))
     d_grid = d_grid.to('cuda')
 
     tmp = disparity_softmax*d_grid

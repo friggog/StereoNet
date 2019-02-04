@@ -155,10 +155,13 @@ def KittiList(filepath):
 
     if '15' in filepath:
         train = os.listdir(filepath + 'training/' + left_fold)
+        train = [filepath + 'training/' + left_fold + p for p in train]
         val = os.listdir(filepath + 'testing/' + left_fold)
         val = [p for p in val if '_10' in p]
+        val = [filepath + 'testing/' + left_fold + p for p in val]
     else:
         image = os.listdir(filepath + left_fold)
+        image = [filepath + left_fold + p for p in val]
         train = image[:200]
         val = image[200:]
 
@@ -173,9 +176,9 @@ def KittiList(filepath):
         disp_val_L = [p.replace(left_fold, disp_L) for p in val]
         disp_val_R = [p.replace(left_fold, disp_R) for p in val]
     else:
-        disp_train_L = ''
-        disp_train_R = ''
-        disp_val_L = ''
-        disp_val_R = ''
+        disp_train_L = ['' for _ in train]
+        disp_train_R = ['' for _ in train]
+        disp_val_L = ['' for _ in val]
+        disp_val_R = ['' for _ in val]
 
     return left_train, right_train, disp_train_L, disp_train_R, left_val, right_val, disp_val_L, disp_val_R
