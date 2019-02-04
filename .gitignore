@@ -1,5 +1,4 @@
-.idea/
-__pycache__/
-*.pkl
-*.txt
-*.tar
+__pycache__
+datasets/
+checkpoints/
+out/
