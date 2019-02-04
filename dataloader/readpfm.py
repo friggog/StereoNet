@@ -1,7 +1,7 @@
 import re
 import numpy as np
 import sys
- 
+
 
 def readPFM(file):
     file = open(file, 'rb')
@@ -30,11 +30,11 @@ def readPFM(file):
         raise Exception('Malformed PFM header.')
 
     scale = float(file.readline().rstrip())
-    if scale < 0: # little-endian
+    if scale < 0:  # little-endian
         endian = '<'
         scale = -scale
     else:
-        endian = '>' # big-endian
+        endian = '>'  # big-endian
 
     data = np.fromfile(file, endian + 'f')
     shape = (height, width, 3) if color else (height, width)
@@ -42,4 +42,3 @@ def readPFM(file):
     data = np.reshape(data, shape)
     data = np.flipud(data)
     return data, scale
-
