@@ -146,7 +146,7 @@ class KittiImageLoader(BaseImageLoader):
             dataR = self.dploader(disp_R)
 
         if self.training:
-            th, tw = 256, 512
+            th, tw = 368, 1232
 
             x1 = random.randint(0, w - tw)
             y1 = random.randint(0, h - th)

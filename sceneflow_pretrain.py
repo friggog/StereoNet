@@ -62,7 +62,7 @@ class WrapperToStopWeirdStuffHappening:
         dispL = Variable(torch.FloatTensor(dispL)).cuda()
         dispR = Variable(torch.FloatTensor(dispR)).cuda()
 
-        dispEstL, dispEstR = self.model(imgL, imgR)
+        dispPreL, dispPreR, dispEstL, dispEstR = self.model(imgL, imgR)
 
         # loss = 0
         # # calculate loss images
@@ -100,11 +100,14 @@ class WrapperToStopWeirdStuffHappening:
         # dtl.show()
         # input()
 
-        outputR = torch.squeeze(dispEstR, 1)
-        outputL = torch.squeeze(dispEstL, 1)
-        lossR = F.smooth_l1_loss(outputR * self.im_scale, dispR, reduction='mean')
-        lossL = F.smooth_l1_loss(outputL * self.im_scale, dispL, reduction='mean')
-        loss = (lossR + lossL) / 2
+        loss = 0
+        # sum losses for L/R unrefined and refined predictions
+        for outputL, outputR in [(dispPreL, dispPreR), (dispEstL, dispEstR)]:
+            outputR = torch.squeeze(outputR, 1)
+            outputL = torch.squeeze(outputL, 1)
+            lossR = F.smooth_l1_loss(outputR * self.im_scale, dispR, reduction='mean')
+            lossL = F.smooth_l1_loss(outputL * self.im_scale, dispL, reduction='mean')
+            loss += (lossR + lossL)
 
         self.optimizer.zero_grad()
         loss.backward()
@@ -119,7 +122,7 @@ class WrapperToStopWeirdStuffHappening:
         imgL = imgL * 0.5 + 0.5
         imgR = imgR * 0.5 + 0.5
         with torch.no_grad():
-            outputL, outputR = self.model(imgL, imgR)
+            _, _, outputL, outputR = self.model(imgL, imgR)
         estL = apply_disparity(imgR, -outputL.cuda() * self.im_scale)
         estR = apply_disparity(imgL, outputR.cuda() * self.im_scale)
         tgrey = transforms.ToPILImage(mode='L')
@@ -238,7 +241,8 @@ class WrapperToStopWeirdStuffHappening:
         if os.path.exists(self.checkpoint_path) and load:
             state_dict = torch.load(self.checkpoint_path)
             self.model.load_state_dict(state_dict['state_dict'])
-            self.optimizer.load_state_dict(state_dict['optimizer_state_dict'])
+            if start_epoch == -1:
+                self.optimizer.load_state_dict(state_dict['optimizer_state_dict'])
             self.epoch_start = state_dict['epoch']
             print("-- checkpoint loaded --")
 
@@ -262,7 +266,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--load', dest='load', action='store_true')
     parser.add_argument('--test-only', dest='skip_training', action='store_true')
-    parser.add_argument('--epochs', dest='epochs', action='store', default=32, type=int)
+    parser.add_argument('--epochs', dest='epochs', action='store', default=16, type=int)
     parser.add_argument('--start-at', dest='start_at', action='store', default=-1, type=int)
     parser.add_argument('--batch-size', dest='batch_size', action='store', default=1, type=int)
     args = parser.parse_args()

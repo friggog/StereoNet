@@ -83,8 +83,8 @@ class StereoNet(nn.Module):
 
     def forward_stage3(self, disparity_low_l, disparity_low_r, left, right):
         """upsample and concatenate"""
-        d_high_l = nn.functional.interpolate(disparity_low_l, [left.shape[2], left.shape[3]])
-        d_high_r = nn.functional.interpolate(disparity_low_r, [right.shape[2], right.shape[3]])
+        d_high_l = nn.functional.interpolate(disparity_low_l, [left.shape[2], left.shape[3]], mode='bilinear', align_corners=True)
+        d_high_r = nn.functional.interpolate(disparity_low_r, [right.shape[2], right.shape[3]], mode='bilinear', align_corners=True)
 
         d_concat_l = torch.cat([d_high_l, left], dim=1)
         d_concat_r = torch.cat([d_high_r, right], dim=1)
@@ -109,13 +109,13 @@ class StereoNet(nn.Module):
         # image.show()
         # input()
 
-        d_high_l = nn.functional.interpolate(disparity_low_l, [left.shape[2], left.shape[3]])
-        d_high_r = nn.functional.interpolate(disparity_low_r, [right.shape[2], right.shape[3]])
+        d_high_l = nn.functional.interpolate(disparity_low_l, [left.shape[2], left.shape[3]], mode='bilinear', align_corners=True)
+        d_high_r = nn.functional.interpolate(disparity_low_r, [right.shape[2], right.shape[3]], mode='bilinear', align_corners=True)
 
         d_final_l = nn.ReLU()(d_high_l + d_refined_l)
         d_final_r = nn.ReLU()(d_high_r + d_refined_r)
 
-        return d_final_l, d_final_r
+        return d_high_l, d_high_r, d_final_l, d_final_r
 
 
 class MetricBlock(nn.Module):

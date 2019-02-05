@@ -209,7 +209,7 @@ class Wrapper():
         self.model.cuda()
 
         self.optimizer = optim.Adam(
-            self.model.parameters(), lr=0.001, betas=(0.9, 0.999))
+            self.model.parameters(), lr=0.0001, betas=(0.9, 0.999))
 
         print('Number of model parameters: {}'.format(
             sum([p.data.nelement() for p in self.model.parameters()])))
@@ -297,7 +297,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--load', dest='checkpoint_name', action='store', type=str, default="sceneflow_checkpoint.tar")
     parser.add_argument('--epochs', dest='epochs', action='store', type=int, default=32)
-    parser.add_argument('--batch_size', dest='batch_size', action='store', type=int, default=6)
+    parser.add_argument('--batch_size', dest='batch_size', action='store', type=int, default=1)
     parser.add_argument('--start-at', dest='start_at', action='store', default=-1, type=int)
     parser.add_argument('--test-only', dest='test_only', action='store_true')
     args = parser.parse_args()
