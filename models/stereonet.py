@@ -22,7 +22,7 @@ class StereoNet(nn.Module):
         self.downsampling = nn.Sequential(
             nn.Conv2d(3, 32, 5, stride=2, padding=2),
             nn.Conv2d(32, 32, 5, stride=2, padding=2),
-            nn.Conv2d(32, 32, 5, stride=2, padding=2),
+            # nn.Conv2d(32, 32, 5, stride=2, padding=2),
             nn.Conv2d(32, 32, 5, stride=2, padding=2),
         )
 
@@ -30,7 +30,7 @@ class StereoNet(nn.Module):
             ResBlock(32, 32),
             ResBlock(32, 32),
             ResBlock(32, 32),
-            ResBlock(32, 32),
+            # ResBlock(32, 32),
             ResBlock(32, 32),
             ResBlock(32, 32),
             nn.Conv2d(32, 32, 3, 1, 1),
@@ -75,8 +75,8 @@ class StereoNet(nn.Module):
         return disparity_low  # low resolution disparity map
 
     def forward_stage2(self, feature_l, feature_r):
-        cost_v_l = CostVolume(feature_l, feature_r, position='left', method=self.cost_volume_method, k=4)
-        cost_v_r = CostVolume(feature_r, feature_l, position='right', method=self.cost_volume_method, k=4)
+        cost_v_l = CostVolume(feature_l, feature_r, position='left', method=self.cost_volume_method, k=3)
+        cost_v_r = CostVolume(feature_r, feature_l, position='right', method=self.cost_volume_method, k=3)
         disparity_low_l = self.forward_once_2(cost_v_l)
         disparity_low_r = self.forward_once_2(cost_v_r)
         return disparity_low_l, disparity_low_r
@@ -152,7 +152,6 @@ class ResBlock(nn.Module):
         self.d = dilation
 
     def forward(self, x):
-        # print("in_ch = %d, out_ch = %d, p = %d, d = %d, s = %s" % (self.in_ch, self.out_ch, self.p, self.d, self.stride))
         residual = x
         out = self.conv1(x)
         out = self.bn1(out)
