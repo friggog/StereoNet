@@ -65,11 +65,22 @@ class SceneFlowImageLoader(BaseImageLoader):
         dataL = np.ascontiguousarray(dataL, dtype=np.float32)
         dataR = np.ascontiguousarray(dataR, dtype=np.float32)
 
+        delta = 0.3
+        brightness_factor = random.uniform(1-delta, 1+delta)
+        contrast_factor = random.uniform(1-delta, 1+delta)
+        saturation_factor = random.uniform(1-delta, 1+delta)
+        hue_factor = random.uniform(-delta, delta)
+        gamma_factor = random.uniform(1-delta, 1+delta)
         if self.training:
             t = transforms.Compose([
-                transforms.ColorJitter(0.3, 0.2, 0.2, 0.1),
+                transforms.Lambda(lambda img: transforms.functional.adjust_brightness(img, brightness_factor)),
+                transforms.Lambda(lambda img: transforms.functional.adjust_contrast(img, contrast_factor)),
+                transforms.Lambda(lambda img: transforms.functional.adjust_saturation(img, saturation_factor)),
+                transforms.Lambda(lambda img: transforms.functional.adjust_hue(img, hue_factor)),
+                transforms.Lambda(lambda img: transforms.functional.adjust_gamma(img, gamma_factor)),
                 transforms.ToTensor(),
-                transforms.Normalize(BASE_NORM_STATS['mean'], BASE_NORM_STATS['std'])])
+                transforms.Normalize(BASE_NORM_STATS['mean'], BASE_NORM_STATS['std'])
+            ])
 
             th, tw = 512, 960
 
@@ -101,10 +112,19 @@ class Stereo360ImageLoader(BaseImageLoader):
         right_img = self.loader(right)
         w, h = left_img.size
 
+        delta = 0.3
+        brightness_factor = random.uniform(1-delta, 1+delta)
+        contrast_factor = random.uniform(1-delta, 1+delta)
+        saturation_factor = random.uniform(1-delta, 1+delta)
+        hue_factor = random.uniform(-delta, delta)
+        gamma_factor = random.uniform(1-delta, 1+delta)
         if self.training:
             t = transforms.Compose([
-                transforms.ColorJitter(0.3, 0.2, 0.2, 0.1),
-                transforms.RandomHorizontalFlip(),
+                transforms.Lambda(lambda img: transforms.functional.adjust_brightness(img, brightness_factor)),
+                transforms.Lambda(lambda img: transforms.functional.adjust_contrast(img, contrast_factor)),
+                transforms.Lambda(lambda img: transforms.functional.adjust_saturation(img, saturation_factor)),
+                transforms.Lambda(lambda img: transforms.functional.adjust_hue(img, hue_factor)),
+                transforms.Lambda(lambda img: transforms.functional.adjust_gamma(img, gamma_factor)),
                 transforms.ToTensor(),
                 transforms.Normalize(BASE_NORM_STATS['mean'], BASE_NORM_STATS['std'])
             ])
@@ -159,17 +179,21 @@ class KittiImageLoader(BaseImageLoader):
             # dataR = np.ascontiguousarray(dataR, dtype=np.float32)
             dataR = dataR[:, y1:y1 + th, x1:x1 + tw]
 
-            if disp_L == '':
-                t = transforms.Compose([
-                    transforms.ColorJitter(0.3, 0.2, 0.2, 0.1),
-                    transforms.RandomHorizontalFlip(),  # no disparity so can flip images directly
-                    transforms.ToTensor(),
-                    transforms.Normalize(BASE_NORM_STATS['mean'], BASE_NORM_STATS['std'])])
-            else:
-                t = transforms.Compose([
-                    transforms.ColorJitter(0.3, 0.2, 0.2, 0.1),
-                    transforms.ToTensor(),
-                    transforms.Normalize(BASE_NORM_STATS['mean'], BASE_NORM_STATS['std'])])
+            delta = 0.3
+            brightness_factor = random.uniform(1-delta, 1+delta)
+            contrast_factor = random.uniform(1-delta, 1+delta)
+            saturation_factor = random.uniform(1-delta, 1+delta)
+            hue_factor = random.uniform(-delta, delta)
+            gamma_factor = random.uniform(1-delta, 1+delta)
+            t = transforms.Compose([
+                transforms.Lambda(lambda img: transforms.functional.adjust_brightness(img, brightness_factor)),
+                transforms.Lambda(lambda img: transforms.functional.adjust_contrast(img, contrast_factor)),
+                transforms.Lambda(lambda img: transforms.functional.adjust_saturation(img, saturation_factor)),
+                transforms.Lambda(lambda img: transforms.functional.adjust_hue(img, hue_factor)),
+                transforms.Lambda(lambda img: transforms.functional.adjust_gamma(img, gamma_factor)),
+                transforms.ToTensor(),
+                transforms.Normalize(BASE_NORM_STATS['mean'], BASE_NORM_STATS['std'])
+            ])
         else:
             left_img = left_img.crop((w -1232, h -368, w, h))
             right_img = right_img.crop((w -1232, h -368, w, h))

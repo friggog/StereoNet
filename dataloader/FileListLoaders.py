@@ -130,12 +130,6 @@ def SceneFlowList(filepath):
     test_right_disp = all_right_disp[:n_test]
     all_right_disp = all_right_disp[n_test:]
 
-    # TEMP
-    all_left_img = all_left_img[:11562]
-    all_right_img = all_right_img[:11562]
-    all_left_disp = all_left_disp[:11562]
-    all_right_disp = all_right_disp[:11562]
-
     assert(len(all_left_img) == len(all_right_img) ==
            len(all_left_disp) == len(all_right_disp))
     assert(len(test_left_img) == len(test_right_img) ==
@@ -181,4 +175,26 @@ def KittiList(filepath):
         disp_val_L = ['' for _ in val]
         disp_val_R = ['' for _ in val]
 
+    return left_train, right_train, disp_train_L, disp_train_R, left_val, right_val, disp_val_L, disp_val_R
+
+
+def Stereo360List(filepath):
+    left_train = []
+    right_train = []
+    with open(filepath + 'train.txt') as f:
+        l = f.read().split(' ')
+        left_train.append(filepath + l[0])
+        right_train.append(filepath + l[1])
+
+    left_val = []
+    right_val = []
+    with open(filepath + 'test.txt') as f:
+        l = f.read().split(' ')
+        left_val.append(filepath + l[0])
+        right_val.append(filepath + l[1])
+
+    disp_train_L = ['' for _ in train]
+    disp_train_R = ['' for _ in train]
+    disp_val_L = ['' for _ in val]
+    disp_val_R = ['' for _ in val]
     return left_train, right_train, disp_train_L, disp_train_R, left_val, right_val, disp_val_L, disp_val_R

@@ -98,8 +98,8 @@ class Wrapper():
 
     def test(self, imgL, imgR, dispL, dispR):
         self.model.eval()
-        imgL = Variable(torch.FloatTensor(imgL))
-        imgR = Variable(torch.FloatTensor(imgR))
+        imgL = Variable(torch.FloatTensor(imgL)) * 0.5 + 0.5
+        imgR = Variable(torch.FloatTensor(imgR)) * 0.5 + 0.5
         imgL, imgR = imgL.cuda(), imgR.cuda()
         with torch.no_grad():
             outputL, outputR = self.model(imgL, imgR)
@@ -108,17 +108,13 @@ class Wrapper():
         tgrey = transforms.ToPILImage(mode='L')
         trgb = transforms.ToPILImage(mode='RGB')
 
-        i = 1  # output first of each batch
+        i = 0  # output first of each batch
         dl = tgrey(outputL[i].data.cpu())
         dr = tgrey(outputR[i].data.cpu())
-        # dlt = tgrey(dispL[i].unsqueeze(0) / self.im_scale * 2)
-        # drt = tgrey(dispR[i].unsqueeze(0) / self.im_scale * 2)
         ts = int(time.time() * 100000)
         os.mkdir('out/' + str(ts))
         dl.save('out/' + str(ts) + '/Lde.png')
         dr.save('out/' + str(ts) + '/Rde.png')
-        # dlt.save('out/' + str(ts) + '/Ldt.png')
-        # drt.save('out/' + str(ts) + '/Rdt.png')
         pl = trgb(imgL.data.cpu()[i, :, 4:, :])
         pr = trgb(imgR.data.cpu()[i, :, 4:, :])
         el = trgb(estL.data.cpu()[i, :, 4:, :])
@@ -130,54 +126,12 @@ class Wrapper():
 
         outputL = torch.squeeze(outputL.data.cpu(), 1)
         outputR = torch.squeeze(outputR.data.cpu(), 1)
-        # outputL = outputL[dispL.squeeze(1) > 0]
-        # outputR = outputR[dispR.squeeze(1) > 0]
-        # dispL = dispL[dispL.squeeze(1) > 0]
-        # dispR = dispR[dispR.squeeze(1) > 0]
         lossR = F.smooth_l1_loss(outputR * self.im_scale, dispR, reduction='mean')
         lossL = F.smooth_l1_loss(outputL * self.im_scale, dispL, reduction='mean')
         loss = (lossR + lossL) / 2
         # loss = torch.mean(torch.abs((outputL * self.im_scale) - dispL)) + \
         #     torch.mean(torch.abs((outputR * self.im_scale) - dispR))
-
-        EPE = loss
-        return EPE
-
-    # def test(self, imgL, imgR, dispL, dispR):
-    #     self.model.eval()
-    #     imgL = Variable(torch.FloatTensor(imgL))
-    #     imgR = Variable(torch.FloatTensor(imgR))
-    #     _, width = imgR.shape[2:]
-    #     imgL, imgR = imgL.cuda(), imgR.cuda()
-
-    #     with torch.no_grad():
-    #         dispEstL, dispEstR = self.model(imgL, imgR)
-
-    #     dispEstL = dispEstL * width
-    #     dispEstR = dispEstR * width
-
-    #     # computing 3-px error rate#
-    #     index = np.argwhere(dispL > 0)
-    #     aL[index[0][:], index[1][:], index[2][:]] = np.abs(
-    #         dispEstL[index[0][:], index[1][:], index[2][:]] -dispL[index[0][:], index[1][:], index[2][:]])
-    #     correctL = (aL[index[0][:], index[1][:], index[2][:]] < 3) | (
-    #         aL[index[0][:], index[1][:], index[2][:]] < aL[index[0][:], index[1][:], index[2][:]] *0.05)
-    #     torch.cuda.empty_cache()
-
-    #     three_pixel_error_rate_L = 1 - \
-    #         (float(torch.sum(correct)) /float(len(index[0])))
-
-    #     index = np.argwhere(dispR > 0)
-    #     aR[index[0][:], index[1][:], index[2][:]] = np.abs(
-    #         dispEstR[index[0][:], index[1][:], index[2][:]] -dispR[index[0][:], index[1][:], index[2][:]])
-    #     correctR = (aR[index[0][:], index[1][:], index[2][:]] < 3) | (
-    #         aR[index[0][:], index[1][:], index[2][:]] < aR[index[0][:], index[1][:], index[2][:]] *0.05)
-    #     torch.cuda.empty_cache()
-
-    #     three_pixel_error_rate_R = 1 - \
-    #         (float(torch.sum(correct)) /float(len(index[0])))
-
-    #     return (three_pixel_error_rate_L + three_pixel_error_rate_R) / 2
+        return loss
 
     def main(self, batch_size, epochs, checkpoint_name, start_at, test_only):
         root_path = "D:/StereoNet"
@@ -185,19 +139,19 @@ class Wrapper():
         torch.manual_seed(0)
         torch.cuda.manual_seed(0)
 
-        self.im_scale = 1232 * 0.2
+        self.im_scale = 1440 * 0.2
 
-        all_left_img, all_right_img, all_left_disp, all_right_disp, test_left_img, test_right_img, test_left_disp, test_right_disp = FileListLoaders.KittiList(
-            './datasets/kitti15/')
+        all_left_img, all_right_img, all_left_disp, all_right_disp, test_left_img, test_right_img, test_left_disp, test_right_disp = FileListLoaders.Stereo360List(
+            './datasets/stereo360/')
 
         TrainImgLoader = torch.utils.data.DataLoader(
-            ImageLoaders.KittiImageLoader(all_left_img, all_right_img,
-                                          all_right_disp, all_left_disp, True),
+            ImageLoaders.Stereo360ImageLoader(all_left_img, all_right_img,
+                                              all_right_disp, all_left_disp, True),
             batch_size=batch_size, shuffle=True, num_workers=12, drop_last=True)
 
         TestImgLoader = torch.utils.data.DataLoader(
-            ImageLoaders.KittiImageLoader(test_left_img, test_right_img,
-                                          test_left_disp, all_right_disp, False),
+            ImageLoaders.Stereo360ImageLoader(test_left_img, test_right_img,
+                                              test_left_disp, all_right_disp, False),
             batch_size=batch_size, shuffle=False, num_workers=4, drop_last=False)
 
         cost_volume_method = "subtract"
@@ -229,11 +183,11 @@ class Wrapper():
             epoch_start = start_at
 
         if epoch_start > 0:
-            self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=8, gamma=0.1, last_epoch=epoch_start -1)
+            self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=epochs // 4, gamma=0.1, last_epoch=epoch_start - 1)
             # self.scheduler = torch.optim.lr_scheduler.ExponentialLR(
             #     self.optimizer, gamma=0.9, last_epoch=epoch_start -1)
         else:
-            self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=8, gamma=0.1)
+            self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=epochs // 4, gamma=0.1)
             # self.scheduler = torch.optim.lr_scheduler.ExponentialLR(
             #     self.optimizer, gamma=0.9)
 
@@ -270,7 +224,7 @@ class Wrapper():
                 # if acc > max_acc:
                 # max_acc = acc
                 # max_epo = epoch
-                savefilename = root_path + '/checkpoints/checkpoint_finetune_kitti15.tar'
+                savefilename = root_path + '/checkpoints/checkpoint_finetune_stereo360.tar'
                 torch.save({
                     'state_dict': self.model.state_dict(),
                     'total_train_loss': total_train_loss,
@@ -296,7 +250,7 @@ class Wrapper():
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--load', dest='checkpoint_name', action='store', type=str, default="sceneflow_checkpoint.tar")
-    parser.add_argument('--epochs', dest='epochs', action='store', type=int, default=32)
+    parser.add_argument('--epochs', dest='epochs', action='store', type=int, default=64)
     parser.add_argument('--batch_size', dest='batch_size', action='store', type=int, default=1)
     parser.add_argument('--start-at', dest='start_at', action='store', default=-1, type=int)
     parser.add_argument('--test-only', dest='test_only', action='store_true')

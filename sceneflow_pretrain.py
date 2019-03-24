@@ -18,7 +18,7 @@ from utils.bilinear_sampler import apply_disparity
 import pytorch_ssim
 import torchvision.transforms as transforms
 from PIL import Image, ImageOps
-
+from tensorboardX import SummaryWriter
 
 def gradient_x(img):
     gx = img[:, :, :, :-1] - img[:, :, :, 1:]
@@ -55,7 +55,7 @@ def SSIM(x, y):
 
 class WrapperToStopWeirdStuffHappening:
 
-    def train(self, imgL, imgR, dispL, dispR):
+    def train(self, n_iter, imgL, imgR, dispL, dispR):
         self.model.train()
         imgL = Variable(torch.FloatTensor(imgL)).cuda()
         imgR = Variable(torch.FloatTensor(imgR)).cuda()
@@ -63,42 +63,6 @@ class WrapperToStopWeirdStuffHappening:
         dispR = Variable(torch.FloatTensor(dispR)).cuda()
 
         dispPreL, dispPreR, dispEstL, dispEstR = self.model(imgL, imgR)
-
-        # loss = 0
-        # # calculate loss images
-        # imgEstL = apply_disparity(imgR, -dispEstL * self.im_scale)
-        # imgEstR = apply_disparity(imgL, dispEstR * self.im_scale)
-        # right_to_left_disp = apply_disparity(dispEstR, -dispEstL * self.im_scale)
-        # left_to_right_disp = apply_disparity(dispEstL, dispEstR * self.im_scale)
-
-        # # image loss
-        # l1_left = F.smooth_l1_loss(imgEstL, imgL)
-        # l1_right = F.smooth_l1_loss(imgEstR, imgR)
-        # ssim_left = SSIM(imgEstL, imgL)
-        # ssim_right = SSIM(imgEstR, imgR)
-        # im_loss_left = 0.85 * ssim_left + 0.15 * l1_left
-        # im_loss_right = 0.85 * ssim_right + 0.15 * l1_right
-        # im_loss = im_loss_left + im_loss_right
-        # # disparity smoothness loss
-        # disp_loss_left = torch.mean(torch.abs(get_disparity_smoothness(dispEstL, imgL)))
-        # disp_loss_right = torch.mean(torch.abs(get_disparity_smoothness(dispEstR, imgR)))
-        # disp_loss = disp_loss_left + disp_loss_right
-        # # consistency loss
-        # lr_loss_left = torch.mean(torch.abs(right_to_left_disp - dispEstL))
-        # lr_loss_right = torch.mean(torch.abs(left_to_right_disp - dispEstR))
-        # lr_loss = lr_loss_left + lr_loss_right
-        # # total and backprop
-        # loss += im_loss + 0.1 * disp_loss + lr_loss
-
-        # tgrey = transforms.ToPILImage(mode='L')
-        # trgb = transforms.ToPILImage(mode='RGB')
-        # il = trgb(imgL[0].data.cpu())
-        # dl = tgrey(dispEstL[0].data.cpu())
-        # dtl = tgrey(dispL[0].data.cpu().unsqueeze(0) / self.im_scale)
-        # il.show()
-        # dl.show()
-        # dtl.show()
-        # input()
 
         loss = 0
         # sum losses for L/R unrefined and refined predictions
@@ -108,6 +72,18 @@ class WrapperToStopWeirdStuffHappening:
             lossR = F.smooth_l1_loss(outputR * self.im_scale, dispR, reduction='mean')
             lossL = F.smooth_l1_loss(outputL * self.im_scale, dispL, reduction='mean')
             loss += (lossR + lossL)
+
+        if n_iter > 0:
+            writer.add_scalar('losses/left', lossL, n_iter)
+            writer.add_scalar('losses/right', lossR, n_iter)
+            writer.add_scalar('loss', loss, n_iter)
+            if LOG_IMAGES:
+                x = vutils.make_grid(imgL, normalize=False, scale_each=False)
+                writer.add_image('img', x, n_iter)
+                x = vutils.make_grid(dispL, normalize=False, scale_each=False)
+                writer.add_image('dispGT', x, n_iter)
+                x = vutils.make_grid(outputL, normalize=False, scale_each=False)
+                writer.add_image('dispEst', x, n_iter)
 
         self.optimizer.zero_grad()
         loss.backward()
@@ -122,7 +98,7 @@ class WrapperToStopWeirdStuffHappening:
         imgL = imgL * 0.5 + 0.5
         imgR = imgR * 0.5 + 0.5
         with torch.no_grad():
-            _, _, outputL, outputR = self.model(imgL, imgR)
+            outputL, outputR, _, _ = self.model(imgL, imgR)
         estL = apply_disparity(imgR, -outputL.cuda() * self.im_scale)
         estR = apply_disparity(imgL, outputR.cuda() * self.im_scale)
         tgrey = transforms.ToPILImage(mode='L')
@@ -150,11 +126,6 @@ class WrapperToStopWeirdStuffHappening:
         el.save('out/' + str(ts) + '/Le.png')
         er.save('out/' + str(ts) + '/Re.png')
 
-        # outputL = torch.squeeze(outputL.data.cpu(), 1)
-        # outputR = torch.squeeze(outputR.data.cpu(), 1)
-        # loss = torch.mean(torch.abs((outputL*width)-dispL)) + \
-        #     torch.mean(torch.abs((outputR*width)-dispR))  # end-point-error
-
         outputL = torch.squeeze(outputL.data.cpu(), 1)
         outputR = torch.squeeze(outputR.data.cpu(), 1)
         lossR = F.smooth_l1_loss(outputR * self.im_scale, dispR, reduction='mean')
@@ -176,7 +147,8 @@ class WrapperToStopWeirdStuffHappening:
                 ## training ##
                 for batch_idx, (imgL_crop, imgR_crop, disp_crop_L, disp_crop_R) in enumerate(self.TrainImgLoader):
                     start_time = time.time()
-                    loss = self.train(imgL_crop, imgR_crop,
+                    loss = self.train(batch_idx + epoch * len(self.TrainImgLoader),
+                                      imgL_crop, imgR_crop,
                                       disp_crop_L, disp_crop_R)
                     avg_train_loss += loss
                     if batch_idx % 100 == 0:
@@ -263,12 +235,15 @@ class WrapperToStopWeirdStuffHappening:
 
 
 if __name__ == '__main__':
+    writer = SummaryWriter()
     parser = argparse.ArgumentParser()
     parser.add_argument('--load', dest='load', action='store_true')
     parser.add_argument('--test-only', dest='skip_training', action='store_true')
     parser.add_argument('--epochs', dest='epochs', action='store', default=32, type=int)
     parser.add_argument('--start-at', dest='start_at', action='store', default=-1, type=int)
     parser.add_argument('--batch-size', dest='batch_size', action='store', default=1, type=int)
+    parser.add_argument('--log-images', dest='log_images', action='store_true')
     args = parser.parse_args()
+    LOG_IMAGES = args.log_images
     a = WrapperToStopWeirdStuffHappening(args.epochs, args.batch_size, args.load, args.start_at)
     a.main(not args.skip_training)
