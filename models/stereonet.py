@@ -71,21 +71,19 @@ class StereoNet(nn.Module):
         """the index cost volume's dimension is not right for conv3d here, so we change it"""
         cost_volume = cost_volume.permute([0, 2, 1, 3, 4])
         output = self.cost_volume_filter(cost_volume)
-        disparity_low = soft_argmin(output)
-        return disparity_low  # low resolution disparity map
+        return output
 
     def forward_stage2(self, feature_l, feature_r):
         cost_v_l = CostVolume(feature_l, feature_r, position='left', method=self.cost_volume_method, k=3)
         cost_v_r = CostVolume(feature_r, feature_l, position='right', method=self.cost_volume_method, k=3)
         disparity_low_l = self.forward_once_2(cost_v_l)
         disparity_low_r = self.forward_once_2(cost_v_r)
+        disparity_low_l = torch.squeeze(disparity_low_l, dim=1)
+        disparity_low_r = torch.squeeze(disparity_low_r, dim=1)
         return disparity_low_l, disparity_low_r
 
-    def forward_stage3(self, disparity_low_l, disparity_low_r, left, right):
+    def forward_stage3(self, d_high_l, d_high_r, left, right):
         """upsample and concatenate"""
-        d_high_l = nn.functional.interpolate(disparity_low_l, [left.shape[2], left.shape[3]], mode='bilinear', align_corners=True)
-        d_high_r = nn.functional.interpolate(disparity_low_r, [right.shape[2], right.shape[3]], mode='bilinear', align_corners=True)
-
         d_concat_l = torch.cat([d_high_l, left], dim=1)
         d_concat_r = torch.cat([d_high_r, right], dim=1)
 
@@ -98,8 +96,14 @@ class StereoNet(nn.Module):
         left_feature, right_feature = self.forward_stage1(left, right)
         disparity_low_l, disparity_low_r = self.forward_stage2(
             left_feature, right_feature)
+
+        d_high_l = nn.functional.interpolate(disparity_low_l, [left.shape[2], left.shape[3]], mode='bilinear', align_corners=True)
+        d_high_r = nn.functional.interpolate(disparity_low_r, [right.shape[2], right.shape[3]], mode='bilinear', align_corners=True)
+        d_high_l = soft_argmin(d_high_l)
+        d_high_r = soft_argmin(d_high_r)
+
         d_refined_l, d_refined_r = self.forward_stage3(
-            disparity_low_l, disparity_low_r, left, right)
+            d_high_l, d_high_r, left, right)
 
         # tensor = d_refined_l
         # t = transforms.ToPILImage()
@@ -109,8 +113,8 @@ class StereoNet(nn.Module):
         # image.show()
         # input()
 
-        d_high_l = nn.functional.interpolate(disparity_low_l, [left.shape[2], left.shape[3]], mode='bilinear', align_corners=True)
-        d_high_r = nn.functional.interpolate(disparity_low_r, [right.shape[2], right.shape[3]], mode='bilinear', align_corners=True)
+        # d_high_l = nn.functional.interpolate(disparity_low_l, [left.shape[2], left.shape[3]], mode='bilinear', align_corners=True)
+        # d_high_r = nn.functional.interpolate(disparity_low_r, [right.shape[2], right.shape[3]], mode='bilinear', align_corners=True)
 
         d_final_l = nn.ReLU()(d_high_l + d_refined_l)
         d_final_r = nn.ReLU()(d_high_r + d_refined_r)
@@ -165,14 +169,12 @@ class ResBlock(nn.Module):
 
 def soft_argmin(cost_volume):
     """Remove single-dimensional entries from the shape of an array."""
-    cost_volume_D_squeeze = torch.squeeze(cost_volume, dim=1)
-
     softmax = nn.Softmax(dim=1)
-    disparity_softmax = softmax(cost_volume_D_squeeze)
+    disparity_softmax = softmax(-cost_volume)
 
-    d_grid = torch.arange(cost_volume_D_squeeze.shape[1], dtype=torch.float)
+    d_grid = torch.arange(cost_volume.shape[1], dtype=torch.float)
     d_grid = d_grid.reshape(-1, 1, 1)
-    d_grid = d_grid.repeat((cost_volume.shape[0], 1, cost_volume.shape[3], cost_volume.shape[4]))
+    d_grid = d_grid.repeat((cost_volume.shape[0], 1, cost_volume.shape[2], cost_volume.shape[3]))
     d_grid = d_grid.to('cuda')
 
     tmp = disparity_softmax*d_grid

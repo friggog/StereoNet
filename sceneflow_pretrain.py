@@ -67,6 +67,7 @@ class WrapperToStopWeirdStuffHappening:
         dispPreL, dispPreR, dispEstL, dispEstR = self.model(imgL, imgR)
 
         loss = 0
+        # TODO should probably use a mix of SSIM and L1
         # sum losses for L/R unrefined and refined predictions
         for outputL, outputR in [(dispPreL, dispPreR), (dispEstL, dispEstR)]:
             outputR = torch.squeeze(outputR, 1)
@@ -79,7 +80,7 @@ class WrapperToStopWeirdStuffHappening:
             writer.add_scalar('losses/left', lossL, n_iter)
             writer.add_scalar('losses/right', lossR, n_iter)
             writer.add_scalar('loss', loss, n_iter)
-            if LOG_IMAGES and n_iter % 100 == 0:
+            if LOG_IMAGES and n_iter % 50 == 0:
                 x = vutils.make_grid(imgL * 0.5 + 0.5, normalize=False, scale_each=False)
                 writer.add_image('img', x, n_iter)
                 x = vutils.make_grid(dispL, normalize=True, scale_each=True)
@@ -185,7 +186,6 @@ class WrapperToStopWeirdStuffHappening:
 
         batchSize = batch_size
         self.epochs = epochs
-        self.im_scale = 960 * 0.2
 
         self.TrainImgLoader = torch.utils.data.DataLoader(
             ImageLoaders.SceneFlowImageLoader(all_left_img, all_right_img,
@@ -205,7 +205,7 @@ class WrapperToStopWeirdStuffHappening:
         self.model = nn.DataParallel(self.model)
         self.model.cuda()
 
-        self.optimizer = optim.Adam(self.model.parameters(), lr=0.001, betas=(0.9, 0.999), eps=1e-08)
+        self.optimizer = optim.Adam(self.model.parameters(), lr=0.0001, betas=(0.9, 0.999), eps=1e-08)
         # self.optimizer = optim.RMSprop(self.model.parameters(), lr=0.001, weight_decay=0.0001)
         self.epoch_start = 0
 
